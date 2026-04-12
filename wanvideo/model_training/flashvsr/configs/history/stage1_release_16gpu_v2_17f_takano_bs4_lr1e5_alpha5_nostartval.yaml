@@ -1,0 +1,48 @@
+data:
+  dataset_mode: streaming
+  internal_url: "conductor://lucid-vr/datasets/dryrun_20m/video/takano-video-tier1-qwen3/1080p/,conductor://lucid-vr/datasets/dryrun_20m/video/takano-video-tier2-qwen3/1080p/"
+  image_internal_url: ""
+  image_dataset_prob: 0.0
+  height: 768
+  width: 1280
+  num_frames: 17
+  stride: 1
+  max_source_frames: 160
+  enable_degradation: true
+  global_seed: 20260407
+  dataset_num_workers: 0
+model:
+  model_paths: '["/mnt/models/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors","/mnt/models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth"]'
+  prompt_tensor_path: "/mnt/task_runtime/FlashVSR/examples/WanVSR/prompt_tensor/posi_prompt.pth"
+  lq_proj_layer_num: 1
+  lq_proj_scale: 5.0
+train:
+  batch_size: 4
+  learning_rate: 1e-5
+  weight_decay: 0.01
+  num_epochs: 1
+  save_steps: 100
+  extra_save_steps: "10,20,50"
+  log_loss_steps: 1
+  validation_at_start: false
+  gradient_accumulation_steps: 1
+  max_train_steps: 1000
+lora:
+  trainable_models: "lq_proj_in"
+  lora_base_model: "dit"
+  lora_target_modules: "q,k,v,o"
+  lora_rank: 384
+validation:
+  validation_num_samples: 3
+  validation_num_inference_steps: 50
+  validation_fps: 8
+output:
+  output_path: "/mnt/task_wrapper/user_output/artifacts/exp/train_stage1_release_16gpu_v2_17f_takano_bs4_lr1e5_alpha5_nostartval/output"
+wandb:
+  use_wandb: true
+  wandb_project: "flashvsr"
+  wandb_name: "flashvsr-stage1-release-16gpu-v2-17f-takano-bs4-lr1e5-alpha5-nostartval"
+  wandb_mode: "online"
+runtime:
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: true

@@ -1,0 +1,1 @@
+# FlashVSR data package namespace.
