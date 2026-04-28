@@ -6,6 +6,11 @@ def add_dataset_base_config(parser: argparse.ArgumentParser):
     parser.add_argument("--dataset_metadata_path", type=str, default=None, help="Path to the metadata file of the dataset.")
     parser.add_argument("--dataset_repeat", type=int, default=1, help="Number of times to repeat the dataset per epoch.")
     parser.add_argument("--dataset_num_workers", type=int, default=0, help="Number of workers for data loading.")
+    parser.add_argument("--dataloader_prefetch_factor", type=int, default=2, help="Number of batches prefetched by each DataLoader worker when dataset_num_workers > 0.")
+    parser.add_argument("--dataloader_persistent_workers", default=False, action="store_true", help="Keep DataLoader workers alive between epochs when dataset_num_workers > 0.")
+    parser.add_argument("--dataloader_pin_memory", default=False, action="store_true", help="Enable DataLoader pin_memory. This may speed host-to-GPU copies but increases pinned host memory use.")
+    parser.add_argument("--dataloader_in_order", default=True, action=argparse.BooleanOptionalAction, help="When num_workers > 0, keep DataLoader batches in worker order. Disable for iterable remote media datasets to avoid head-of-line blocking.")
+    parser.add_argument("--dataloader_multiprocessing_context", type=str, default=None, choices=["fork", "spawn", "forkserver"], help="Optional DataLoader multiprocessing context. Use spawn if workers must touch CUDA.")
     parser.add_argument("--data_file_keys", type=str, default="image,video", help="Data file keys in the metadata. Comma-separated.")
     return parser
 
@@ -46,6 +51,8 @@ def add_output_config(parser: argparse.ArgumentParser):
     parser.add_argument("--remove_prefix_in_ckpt", type=str, default="pipe.dit.", help="Remove prefix in ckpt.")
     parser.add_argument("--save_steps", type=int, default=None, help="Number of checkpoint saving invervals. If None, checkpoints will be saved every epoch.")
     parser.add_argument("--extra_save_steps", type=str, default="", help="Extra checkpoint steps in comma-separated format, e.g. 10,25,50,100.")
+    parser.add_argument("--resume_training_state_dir", type=str, default=None, help="Directory created by accelerator.save_state for full trainer-state resume.")
+    parser.add_argument("--resume_reset_rng_with_global_seed", default=False, action="store_true", help="After loading full training state, reseed RNGs with global_seed so future data order can intentionally change.")
     parser.add_argument("--log_loss_steps", type=int, default=1, help="Print loss every N optimizer steps.")
     parser.add_argument("--validation_at_start", default=False, action="store_true", help="Run validation callback once before the first training step.")
     parser.add_argument("--use_wandb", default=False, action="store_true", help="Enable Weights & Biases logging.")

@@ -1,4 +1,5 @@
 import io
+import hashlib
 import json
 import math
 import os
@@ -41,12 +42,16 @@ except ImportError:
         IterableWrapper = None
 
 from diffsynth.core.data.operators import ImageCropAndResize
-from wanvideo.data.flashvsr.degradation.realesrgan_kernels import DegradationModel
+from wanvideo.data.flashvsr.degradation import build_degradation_model
+from .conductor_bridge_v2 import list_remote_files_with_suffixes
 from .parquet_index import FlashVSRParquetRecord, load_parquet_records, normalize_remote_url
 
 
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".webm", ".MP4", ".AVI", ".MOV", ".MKV", ".WEBM")
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG")
+REMOTE_DISCOVERY_PREFIXES = ("conductor://", "s3://", "blobby://")
+REMOTE_DISCOVERY_CACHE_DIR = os.environ.get("FLASHVSR_REMOTE_DISCOVERY_CACHE_DIR", "/tmp/flashvsr_remote_discovery")
+REMOTE_DISCOVERY_STALE_LOCK_SECONDS = int(os.environ.get("FLASHVSR_REMOTE_DISCOVERY_STALE_LOCK_SECONDS", "600"))
 
 
 def _dataset_debug_log(message: str):
@@ -61,6 +66,15 @@ def _dataset_debug_log(message: str):
     log_path = os.path.join(debug_dir, f"dataset_branches_rank{rank}.log")
     with open(log_path, "a", encoding="utf-8") as file:
         file.write(f"rank={rank} local_rank={local_rank} {message}\n")
+
+
+def _train_debug_print(message: str):
+    if not _TRAIN_DEBUG_ENABLED:
+        return
+    rank = os.environ.get("RANK", "?")
+    local_rank = os.environ.get("LOCAL_RANK", "?")
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[dataset_debug {timestamp} rank={rank} local_rank={local_rank}] {message}", flush=True)
 
 
 _CONVERT_DEBUG_COUNT = 0
@@ -101,12 +115,101 @@ def _load_manifest_entries(path: str) -> List[str]:
     return entries
 
 
+def _discovery_cache_paths(base_url: str, suffixes: Sequence[str]) -> Tuple[str, str]:
+    os.makedirs(REMOTE_DISCOVERY_CACHE_DIR, exist_ok=True)
+    payload = json.dumps(
+        {
+            "base_url": normalize_remote_url(base_url),
+            "suffixes": list(suffixes),
+        },
+        sort_keys=True,
+    )
+    cache_key = hashlib.sha1(payload.encode("utf-8")).hexdigest()
+    cache_path = os.path.join(REMOTE_DISCOVERY_CACHE_DIR, f"{cache_key}.json")
+    lock_path = os.path.join(REMOTE_DISCOVERY_CACHE_DIR, f"{cache_key}.lock")
+    return cache_path, lock_path
+
+
+def _read_discovery_cache(cache_path: str) -> Optional[List[str]]:
+    if not os.path.isfile(cache_path):
+        return None
+    with open(cache_path, "r", encoding="utf-8") as file:
+        payload = json.load(file)
+    urls = payload.get("urls")
+    if not isinstance(urls, list):
+        return None
+    return [normalize_remote_url(str(url)) for url in urls]
+
+
+def _write_discovery_cache(cache_path: str, urls: Sequence[str]) -> None:
+    tmp_path = f"{cache_path}.tmp.{os.getpid()}"
+    with open(tmp_path, "w", encoding="utf-8") as file:
+        json.dump({"urls": list(urls)}, file, ensure_ascii=False)
+    os.replace(tmp_path, cache_path)
+
+
+def _try_remove_stale_discovery_lock(lock_path: str) -> bool:
+    try:
+        age = time.time() - os.path.getmtime(lock_path)
+    except FileNotFoundError:
+        return True
+    except Exception:
+        return False
+    if age < REMOTE_DISCOVERY_STALE_LOCK_SECONDS:
+        return False
+    try:
+        os.remove(lock_path)
+        if _TRAIN_DEBUG_ENABLED:
+            print(
+                f"[dataset_discovery] removed stale lock path={lock_path} age_seconds={age:.1f}",
+                flush=True,
+            )
+        return True
+    except FileNotFoundError:
+        return True
+    except Exception as error:
+        if _TRAIN_DEBUG_ENABLED:
+            print(
+                f"[dataset_discovery] failed to remove stale lock path={lock_path} error={type(error).__name__}:{error}",
+                flush=True,
+            )
+        return False
+
+
+def _node_local_rank() -> int:
+    return int(os.environ.get("LOCAL_RANK", "0"))
+
+
+def _degradation_cuda_device() -> str:
+    if torch.cuda.is_available():
+        return f"cuda:{_node_local_rank()}"
+    return "cpu"
+
+
 class ConsistentClipDegradation:
     def __init__(self, config_path: Optional[str] = None):
-        self.model = DegradationModel(config_path=config_path)
+        self.config_path = config_path
+        self.model = None
+        self.model_pid = None
+
+    def _get_model(self):
+        current_pid = os.getpid()
+        if self.model is None or self.model_pid != current_pid:
+            device = _degradation_cuda_device()
+            if device.startswith("cuda"):
+                torch.cuda.set_device(int(device.split(":", 1)[1]))
+            self.model = build_degradation_model(config_path=self.config_path, device=device)
+            self.model_pid = current_pid
+        return self.model
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["model"] = None
+        state["model_pid"] = None
+        return state
 
     def degrade_batch_consistent(self, images: List[Image.Image], seed: Optional[int] = None) -> List[Image.Image]:
-        return self.model.degrade_batch_consistent(images, seed=seed)
+        return self._get_model().degrade_batch_consistent(images, seed=seed)
 
 
 class PseudoVideoGenerator:
@@ -275,6 +378,9 @@ class FlashVSRStreamingDataset(IterableDataset):
         if self.output_tensors:
             self.custom_collate_fn = self.tensor_collate_fn
 
+    def _meets_min_resolution(self, width: int, height: int) -> bool:
+        return int(width) >= int(self.width) and int(height) >= int(self.height)
+
     def _discover_urls(self, base_url: Optional[str], suffixes: Sequence[str]) -> List[str]:
         base_urls = [normalize_remote_url(url) for url in _expand_input_urls(base_url)]
         if not base_urls:
@@ -282,11 +388,135 @@ class FlashVSRStreamingDataset(IterableDataset):
 
         merged_urls: List[str] = []
         for one_base_url in base_urls:
+            _train_debug_print(f"discover_begin base={one_base_url} suffixes={','.join(suffixes)}")
             urls: List[str] = []
+            is_remote = one_base_url.startswith(REMOTE_DISCOVERY_PREFIXES)
             if os.path.isfile(one_base_url) and _looks_like_manifest(one_base_url):
+                _train_debug_print(f"discover_manifest_read_begin path={one_base_url}")
                 urls = _load_manifest_entries(one_base_url)
+                _train_debug_print(f"discover_manifest_read_end path={one_base_url} count={len(urls)}")
 
-            if not urls and parabolt is not None:
+            if not urls and is_remote and str(one_base_url).endswith(tuple(suffixes)):
+                urls = [one_base_url]
+                _train_debug_print(f"discover_direct_remote_file base={one_base_url}")
+
+            if not urls and is_remote:
+                cache_path, lock_path = _discovery_cache_paths(one_base_url, suffixes)
+                _train_debug_print(f"discover_remote_cache_check base={one_base_url} cache={cache_path} lock={lock_path}")
+                if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+                    rank = dist.get_rank()
+                    discovery_payload: List[Optional[Dict[str, Any]]] = [None]
+                    if rank == 0:
+                        try:
+                            _train_debug_print(f"discover_dist_rank0_begin base={one_base_url}")
+                            rank0_urls = _read_discovery_cache(cache_path)
+                            if rank0_urls is not None:
+                                _train_debug_print(f"discover_dist_rank0_cache_hit base={one_base_url} count={len(rank0_urls)}")
+                            if rank0_urls is None:
+                                while True:
+                                    try:
+                                        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                                        os.close(fd)
+                                        _train_debug_print(f"discover_dist_rank0_lock_acquired base={one_base_url}")
+                                        break
+                                    except FileExistsError:
+                                        _try_remove_stale_discovery_lock(lock_path)
+                                        rank0_urls = _read_discovery_cache(cache_path)
+                                        if rank0_urls is not None:
+                                            _train_debug_print(f"discover_dist_rank0_cache_after_lock base={one_base_url} count={len(rank0_urls)}")
+                                            break
+                                        time.sleep(1.0)
+                            if rank0_urls is None:
+                                try:
+                                    _train_debug_print(f"discover_dist_rank0_remote_list_begin base={one_base_url}")
+                                    rank0_urls = [
+                                        normalize_remote_url(item)
+                                        for item in list_remote_files_with_suffixes(one_base_url, suffixes)
+                                    ]
+                                    _train_debug_print(f"discover_dist_rank0_remote_list_end base={one_base_url} count={len(rank0_urls)}")
+                                    _write_discovery_cache(cache_path, rank0_urls)
+                                finally:
+                                    try:
+                                        os.remove(lock_path)
+                                    except FileNotFoundError:
+                                        pass
+                            discovery_payload[0] = {"ok": True, "urls": rank0_urls}
+                        except Exception as error:
+                            discovery_payload[0] = {"ok": False, "error": f"{type(error).__name__}: {error}"}
+                    _train_debug_print(f"discover_dist_broadcast_begin base={one_base_url}")
+                    dist.broadcast_object_list(discovery_payload, src=0)
+                    _train_debug_print(f"discover_dist_broadcast_end base={one_base_url}")
+                    payload = discovery_payload[0] or {"ok": False, "error": "empty discovery payload"}
+                    if not payload.get("ok", False):
+                        raise RuntimeError(
+                            f"rank0 remote discovery failed for {one_base_url}: {payload.get('error')}"
+                        )
+                    urls = [normalize_remote_url(item) for item in payload.get("urls", [])]
+                    if rank != 0 and urls:
+                        try:
+                            _write_discovery_cache(cache_path, urls)
+                        except Exception:
+                            pass
+                else:
+                    cached_urls = _read_discovery_cache(cache_path)
+                    if cached_urls is not None:
+                        urls = cached_urls
+                        _train_debug_print(f"discover_remote_cache_hit base={one_base_url} count={len(urls)}")
+                        # Skip node-local lock/list path when this node already has a valid cache.
+                        filtered = [url for url in urls if str(url).endswith(tuple(suffixes))]
+                        if filtered:
+                            merged_urls.extend(filtered)
+                        elif not is_remote:
+                            merged_urls.extend(urls)
+                        _train_debug_print(f"discover_end base={one_base_url} urls={len(urls)} filtered={len(filtered)} merged={len(merged_urls)}")
+                        continue
+                    local_rank = _node_local_rank()
+                    if local_rank == 0:
+                        _train_debug_print(f"discover_node_local0_begin base={one_base_url}")
+                        while True:
+                            try:
+                                fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                                os.close(fd)
+                                _train_debug_print(f"discover_node_local0_lock_acquired base={one_base_url}")
+                                break
+                            except FileExistsError:
+                                _try_remove_stale_discovery_lock(lock_path)
+                                cached_urls = _read_discovery_cache(cache_path)
+                                if cached_urls is not None:
+                                    urls = cached_urls
+                                    _train_debug_print(f"discover_node_local0_cache_after_lock base={one_base_url} count={len(urls)}")
+                                    break
+                                time.sleep(1.0)
+                        if not urls:
+                            try:
+                                _train_debug_print(f"discover_node_local0_remote_list_begin base={one_base_url}")
+                                urls = [
+                                    normalize_remote_url(item)
+                                    for item in list_remote_files_with_suffixes(one_base_url, suffixes)
+                                ]
+                                _train_debug_print(f"discover_node_local0_remote_list_end base={one_base_url} count={len(urls)}")
+                                _write_discovery_cache(cache_path, urls)
+                            finally:
+                                try:
+                                    os.remove(lock_path)
+                                except FileNotFoundError:
+                                    pass
+                    else:
+                        _train_debug_print(f"discover_node_wait_cache_begin base={one_base_url}")
+                        wait_started_at = time.time()
+                        while True:
+                            cached_urls = _read_discovery_cache(cache_path)
+                            if cached_urls is not None:
+                                urls = cached_urls
+                                _train_debug_print(f"discover_node_wait_cache_end base={one_base_url} count={len(urls)}")
+                                break
+                            if time.time() - wait_started_at > 1800:
+                                raise TimeoutError(
+                                    f"timed out waiting for remote discovery cache for {one_base_url}"
+                                )
+                            time.sleep(1.0)
+
+            if not urls and parabolt is not None and not is_remote:
                 try:
                     urls = list(parabolt.io.find_files(one_base_url))
                 except Exception:
@@ -301,10 +531,16 @@ class FlashVSRStreamingDataset(IterableDataset):
                     urls = [one_base_url]
 
             if not urls:
+                if is_remote:
+                    raise RuntimeError(f"failed to discover remote urls for {one_base_url} via unified conductor bridge")
                 urls = [one_base_url]
 
             filtered = [url for url in urls if str(url).endswith(tuple(suffixes))]
-            merged_urls.extend(filtered if filtered else urls)
+            if filtered:
+                merged_urls.extend(filtered)
+            elif not is_remote:
+                merged_urls.extend(urls)
+            _train_debug_print(f"discover_end base={one_base_url} urls={len(urls)} filtered={len(filtered)} merged={len(merged_urls)}")
 
         return sorted(set(merged_urls))
 
@@ -508,6 +744,10 @@ class FlashVSRStreamingDataset(IterableDataset):
                 ok, frame_bgr = cap.read()
                 if not ok:
                     break
+                frame_h, frame_w = frame_bgr.shape[:2]
+                if not self._meets_min_resolution(frame_w, frame_h):
+                    cap.release()
+                    return None
                 frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
                 frame = Image.fromarray(frame_rgb)
                 frame = self.frame_processor(frame)
@@ -531,7 +771,9 @@ class FlashVSRStreamingDataset(IterableDataset):
         if len(frames) < needed:
             return None
         max_start = len(frames) - needed
-        start = rng.randint(0, max_start) if max_start > 0 else 0
+        if max_start < 1:
+            return None
+        start = rng.randint(1, max_start)
         return [frames[start + idx * self.stride] for idx in range(self.num_frames)]
 
     def _build_lq_clip(self, hr_frames: List[Image.Image], rng: random.Random, sample_seed: int) -> List[Image.Image]:
@@ -567,6 +809,8 @@ class FlashVSRStreamingDataset(IterableDataset):
     def _process_image(self, image: Image.Image, sample_id: str, rng: random.Random) -> Optional[Dict[str, Any]]:
         try:
             image = image.convert("RGB")
+            if not self._meets_min_resolution(*image.size):
+                return None
             sample_seed = self._next_sample_seed(rng)
             pseudo_rng = random.Random(sample_seed)
             frames = self.pseudo_video_generator.generate(image, seed=sample_seed, rng=pseudo_rng)
@@ -691,7 +935,7 @@ class FlashVSRStreamingDataset(IterableDataset):
                 try:
                     image = Image.open(io.BytesIO(self._open_binary(url))).convert("RGB")
                 except Exception as error:
-                    warnings.warn(f"Failed to open image sample {url}: {error}")
+                    warnings.warn(f"Failed to open manifest image sample {url}: {error}")
                     continue
                 sample = self._process_image(image, sample_id=os.path.basename(url), rng=rng)
                 if sample is not None:
@@ -776,7 +1020,7 @@ class FlashVSRStreamingDataset(IterableDataset):
         iterators: List[Iterator[Dict[str, Any]]] = []
         if self.image_tar_urls:
             iterators.append(self._iterate_tar_images(rng=rng))
-        if self.image_file_urls:
+        if self.image_file_urls or self.image_manifest_urls:
             iterators.append(self._iterate_direct_images(rng=rng))
         if not iterators:
             return

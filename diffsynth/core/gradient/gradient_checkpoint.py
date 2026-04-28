@@ -10,7 +10,7 @@ except ModuleNotFoundError:
 
 
 _GC_BRANCH_REPORTED = set()
-_GC_DEBUG_ENABLED = os.environ.get("FLASHVSR_TRAIN_DEBUG", "").lower() in ("1", "true", "yes", "y")
+_GC_DEBUG_ENABLED = os.environ.get("FLASHVSR_GC_DEBUG", "").lower() in ("1", "true", "yes", "y")
 
 
 def _write_debug_marker(filename: str, message: str) -> None:

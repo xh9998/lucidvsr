@@ -1,0 +1,54 @@
+data:
+  dataset_mode: tar_v53
+  yubari_video_tar_url: "conductor://ve-t2222-datasets/projects/yubari/1.1/data/video/"
+  takano_video_tar_url: "s3://lucid-vr/datasets/takano_original/video/takano-video-20231214-train/1080p/,s3://lucid-vr/datasets/takano_original/video/takano-video-20231214-train/4k/,s3://lucid-vr/datasets/takano_original/video/takano-video-20250205-train/1080p/,s3://lucid-vr/datasets/takano_original/video/takano-video-20250205-train/4k/"
+  image_tar_url: "/mnt/task_wrapper/user_output/artifacts/data/highres_manifest/highres_image_manifest_train.txt"
+  yubari_video_prob: 0.5
+  takano_video_prob: 0.5
+  yubari_video_prob: 0.5
+  takano_video_prob: 0.5
+  height: 256
+  width: 448
+  num_frames: 17
+  stride: 1
+  max_source_frames: 160
+  enable_degradation: true
+  global_seed: 20260422
+  dataset_num_workers: 0
+  shuffle_buffer: 16
+  image_video_joint_packed: true
+model:
+  model_paths: '["/mnt/models/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors","/mnt/models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth"]'
+  prompt_tensor_path: "/mnt/task_runtime/FlashVSR/examples/WanVSR/prompt_tensor/posi_prompt.pth"
+  lq_proj_layer_num: 1
+  lq_proj_scale: 1.0
+train:
+  batch_size: 1
+  learning_rate: 1e-5
+  weight_decay: 0.01
+  num_epochs: 1
+  save_steps: 2
+  extra_save_steps: "1"
+  log_loss_steps: 1
+  validation_at_start: false
+  gradient_accumulation_steps: 1
+  max_train_steps: 2
+lora:
+  trainable_models: "lq_proj_in"
+  lora_base_model: "dit"
+  lora_target_modules: "q,k,v,o"
+  lora_rank: 384
+validation:
+  validation_num_samples: 0
+  validation_num_inference_steps: 10
+  validation_fps: 8
+output:
+  output_path: "/mnt/task_wrapper/user_output/artifacts/exp/train_stage1_release_smoke_2gpu_v5_3_lora_17f_fullsources/output"
+wandb:
+  use_wandb: false
+  wandb_project: "flashvsr"
+  wandb_name: "flashvsr-stage1-release-smoke-2gpu-v5-3-lora-17f-fullsources"
+  wandb_mode: "online"
+runtime:
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: false

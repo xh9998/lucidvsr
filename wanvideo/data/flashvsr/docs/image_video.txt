@@ -1,0 +1,67 @@
+可以，压缩成给 codex 直接执行的版本如下。
+
+论文这部分的意思就是：**只有同一个 segment 的 token 才能互相 attention**。图像被当成 `f=1` 的单帧视频，所以图像和视频只是 segment 长度不同，mask 规则完全一样。
+
+```python
+import torch
+import math
+
+def build_segment_ids(segment_lengths, device=None):
+    # segment_lengths 例如 [video_tokens, image_tokens, video_tokens, ...]
+    ids = []
+    for seg_id, seg_len in enumerate(segment_lengths):
+        ids.extend([seg_id] * seg_len)
+    return torch.tensor(ids, dtype=torch.long, device=device)
+
+def build_segment_mask(segment_ids):
+    # True 表示允许 attention
+    return segment_ids[:, None] == segment_ids[None, :]
+
+def apply_attention(q, k, v, mask):
+    # q, k, v: [L, C]
+    scores = q @ k.transpose(0, 1) / math.sqrt(q.size(-1))   # [L, L]
+    scores = scores.masked_fill(~mask, float("-inf"))
+    attn = torch.softmax(scores, dim=-1)
+    out = attn @ v
+    return out
+```
+
+最小使用例子：
+
+```python
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+video_tokens = 1000
+image_tokens = 256
+
+segment_ids = build_segment_ids([video_tokens, image_tokens], device=device)
+mask = build_segment_mask(segment_ids)
+
+L, C = video_tokens + image_tokens, 768
+q = torch.randn(L, C, device=device)
+k = torch.randn(L, C, device=device)
+v = torch.randn(L, C, device=device)
+
+out = apply_attention(q, k, v, mask)
+print(out.shape)  # [1256, 768]
+```
+
+如果你想让 codex 更明确，可以直接给它这句：
+
+```text
+实现一个 block-diagonal segment attention mask：
+1. 输入是每个 segment 的 token 数，例如 [1000, 256]
+2. 给每个 token 分配 segment_id
+3. 构造 mask[i, j] = (segment_id[i] == segment_id[j])
+4. 在 attention score 上把不允许的位置填成 -inf，再 softmax
+```
+
+一句话本质：
+
+```python
+mask = segment_ids[:, None] == segment_ids[None, :]
+```
+
+这就是论文里那个 block-diagonal segment mask 的代码翻译。
+
+如果你愿意，我下一条直接给你一版 **适配 `[B, L, H, D]` 多头注意力输入** 的更短实现。

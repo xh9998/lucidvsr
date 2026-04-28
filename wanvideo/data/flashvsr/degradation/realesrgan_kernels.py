@@ -119,6 +119,10 @@ class DegradationModel:
         if seed is not None:
             random.seed(seed)
             np.random.seed(seed)
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(seed)
+                torch.cuda.manual_seed_all(seed)
 
         input_was_pil_list = isinstance(images, list) and len(images) > 0 and isinstance(images[0], PILImageType)
         if input_was_pil_list:

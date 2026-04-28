@@ -1,0 +1,58 @@
+data:
+  dataset_mode: tar_v3
+  metadata_url: ""
+  metadata_source: auto
+  image_metadata_url: ""
+  image_internal_url: ""
+  yubari_video_tar_url: "conductor://ve-t2222-datasets/projects/yubari/1.1/data/video/"
+  picked17k_image_tar_url: "s3://lucid-vr/datasets/Takano_HighRes_17Ksubset1/"
+  takano_dataset_prob: 0.0
+  image_dataset_prob: 0.0
+  yubari_dataset_prob: 0.50
+  picked17k_dataset_prob: 0.50
+  image_as_single_frame: true
+  height: 256
+  width: 448
+  num_frames: 17
+  stride: 1
+  max_source_frames: 160
+  enable_degradation: true
+  global_seed: 20260421
+  dataset_num_workers: 0
+  shuffle_buffer: 64
+  image_video_joint_packed: true
+model:
+  model_paths: '["/mnt/models/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors","/mnt/models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth"]'
+  prompt_tensor_path: "/mnt/task_runtime/FlashVSR/examples/WanVSR/prompt_tensor/posi_prompt.pth"
+  lq_proj_layer_num: 1
+  lq_proj_scale: 1.0
+train:
+  batch_size: 1
+  learning_rate: 1e-5
+  weight_decay: 0.01
+  num_epochs: 1
+  save_steps: 2
+  extra_save_steps: "1,4"
+  log_loss_steps: 1
+  validation_at_start: false
+  gradient_accumulation_steps: 1
+  max_train_steps: 4
+lora:
+  trainable_models: "lq_proj_in"
+  lora_base_model: "dit"
+  lora_target_modules: "q,k,v,o"
+  lora_rank: 384
+validation:
+  validation_num_samples: 0
+  validation_num_inference_steps: 10
+  validation_fps: 8
+output:
+  output_path: "/mnt/task_wrapper/user_output/artifacts/exp/train_stage1_release_smoke_2gpu_v4_lora_tarv3_17f_yubari_picked17k_1to1/output"
+wandb:
+  use_wandb: false
+  wandb_project: "flashvsr"
+  wandb_name: "flashvsr-stage1-release-smoke-2gpu-v4-lora-tarv3-17f-yubari-picked17k-1to1"
+  wandb_mode: "online"
+runtime:
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: true

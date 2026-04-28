@@ -1,4 +1,4 @@
-__all__ = ["FlashVSRStreamingDataset"]
+__all__ = ["FlashVSRStreamingDataset", "FlashVSRTarStreamingDatasetV3"]
 
 
 def __getattr__(name):
@@ -6,4 +6,8 @@ def __getattr__(name):
         from .streaming_dataset import FlashVSRStreamingDataset
 
         return FlashVSRStreamingDataset
+    if name == "FlashVSRTarStreamingDatasetV3":
+        from .tar_streaming_dataset_v3 import FlashVSRTarStreamingDatasetV3
+
+        return FlashVSRTarStreamingDatasetV3
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

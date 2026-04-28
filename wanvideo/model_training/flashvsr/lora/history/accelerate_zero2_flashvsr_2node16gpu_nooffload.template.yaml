@@ -1,0 +1,19 @@
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: DEEPSPEED
+downcast_bf16: 'no'
+enable_cpu_affinity: false
+machine_rank: __MACHINE_RANK__
+main_training_function: main
+num_machines: 2
+num_processes: 16
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
+main_process_ip: __MASTER_ADDR__
+main_process_port: __MASTER_PORT__
+deepspeed_config:
+  deepspeed_config_file: /mnt/task_runtime/lucidvsr/wanvideo/model_training/flashvsr/lora/history/deepspeed_zero2_flashvsr_nooffload.json

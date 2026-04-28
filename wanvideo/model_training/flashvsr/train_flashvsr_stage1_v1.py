@@ -191,7 +191,7 @@ class PixelShuffle3d(nn.Module):
 
 
 class FlashVSRLQProjIn(nn.Module):
-    def __init__(self, in_dim, out_dim, layer_num=30, zero_init_output=True):
+    def __init__(self, in_dim, out_dim, layer_num=1, zero_init_output=True):
         super().__init__()
         self.ff = 1
         self.hh = 16
@@ -517,7 +517,7 @@ class FlashVSRStage1Pipeline(WanVideoPipeline):
         pipe.model_fn = flashvsr_stage1_model_fn
         pipe.compilable_models = ["dit"]
         pipe.debug_tensor_dump_dir = None
-        effective_lq_proj_layers = len(pipe.dit.blocks) if lq_proj_layer_num is None else int(lq_proj_layer_num)
+        effective_lq_proj_layers = 1 if lq_proj_layer_num is None else int(lq_proj_layer_num)
         pipe.lq_proj_in = FlashVSRLQProjIn(
             in_dim=3,
             out_dim=pipe.dit.dim,
@@ -712,7 +712,7 @@ def flashvsr_parser():
             action.required = False
     parser.add_argument("--prompt_tensor_path", type=str, default=None, help="Path to fixed prompt tensor.")
     parser.add_argument("--lq_proj_checkpoint", type=str, default=None, help="Optional path to initialize lq_proj_in.")
-    parser.add_argument("--lq_proj_layer_num", type=int, default=None, help="Number of linear projection heads in lq_proj_in. Defaults to number of DiT blocks.")
+    parser.add_argument("--lq_proj_layer_num", type=int, default=1, help="Number of linear projection heads in lq_proj_in. Defaults to 1.")
     parser.add_argument("--zero_init_lq_proj_in", type=lambda x: str(x).lower() in ("1", "true", "yes", "y"), default=True, help="Zero-initialize lq_proj_in output projection so step-0 keeps base-model behavior.")
     parser.add_argument("--initialize_model_on_cpu", default=False, action="store_true")
     parser.add_argument("--dataset_mode", type=str, default="unified", choices=("unified", "streaming"), help="Dataset backend.")

@@ -102,6 +102,58 @@ class ImageCropAndResize(DataProcessingOperator):
         return image
 
 
+class ImageCropPreferNative(DataProcessingOperator):
+    """
+    Prefer cropping from the native image resolution.
+
+    Behavior:
+    - if the source image is already large enough, crop directly without resizing
+    - only upscale when the source image is smaller than the requested crop
+    """
+
+    def __init__(self, height=None, width=None, max_pixels=None, height_division_factor=1, width_division_factor=1):
+        self.height = height
+        self.width = width
+        self.max_pixels = max_pixels
+        self.height_division_factor = height_division_factor
+        self.width_division_factor = width_division_factor
+
+    def get_height_width(self, image):
+        if self.height is None or self.width is None:
+            width, height = image.size
+            if width * height > self.max_pixels:
+                scale = (width * height / self.max_pixels) ** 0.5
+                height, width = int(height / scale), int(width / scale)
+            height = height // self.height_division_factor * self.height_division_factor
+            width = width // self.width_division_factor * self.width_division_factor
+        else:
+            height, width = self.height, self.width
+        return height, width
+
+    def crop_native_or_upscale(self, image, target_height, target_width):
+        width, height = image.size
+        if width < target_width or height < target_height:
+            scale = max(target_width / max(width, 1), target_height / max(height, 1))
+            image = torchvision.transforms.functional.resize(
+                image,
+                (round(height * scale), round(width * scale)),
+                interpolation=torchvision.transforms.InterpolationMode.BILINEAR,
+            )
+        width, height = image.size
+        max_left = max(0, width - target_width)
+        max_top = max(0, height - target_height)
+        if max_left == 0 and max_top == 0:
+            return torchvision.transforms.functional.crop(image, 0, 0, target_height, target_width)
+
+        left = 0 if max_left == 0 else torch.randint(0, max_left + 1, (1,)).item()
+        top = 0 if max_top == 0 else torch.randint(0, max_top + 1, (1,)).item()
+        return torchvision.transforms.functional.crop(image, top, left, target_height, target_width)
+
+    def __call__(self, data: Image.Image):
+        target_height, target_width = self.get_height_width(data)
+        return self.crop_native_or_upscale(data, target_height, target_width)
+
+
 class ToList(DataProcessingOperator):
     def __call__(self, data):
         return [data]

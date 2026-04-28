@@ -1,0 +1,61 @@
+data:
+  dataset_mode: parquet_v2
+  metadata_url: "s3://ve-t2222-datasets/datasets/takano-video-tier1/duration_cut-dedup-shuffled/,s3://ve-t2222-datasets/datasets/takano-video-tier2-10m-final/duration_cut-dedup-shuffled/"
+  metadata_source: takano
+  image_metadata_url: "s3://takano-assets/20231106/high_resolution/metadata_split_parquet/train/"
+  image_internal_url: ""
+  yubari_video_tar_url: "conductor://ve-t2222-datasets/projects/yubari/1.1/data/video/"
+  takano_dataset_prob: 0.40
+  image_dataset_prob: 0.40
+  yubari_dataset_prob: 0.20
+  image_as_single_frame: true
+  height: 768
+  width: 1280
+  num_frames: 17
+  stride: 1
+  max_source_frames: 160
+  enable_degradation: true
+  degradation_config_path: "/mnt/task_runtime/lucidvsr/wanvideo/data/flashvsr/degradation/configs/params_aliyun_video_compression_v1.yaml"
+  global_seed: 20260420
+  dataset_num_workers: 0
+  max_parquet_records: null
+  max_yubari_records: null
+  media_cache_dir: null
+  parquet_cache_dir: "/mnt/task_runtime/flashvsr_cache/v4/parquet"
+  parquet_prewarm_files_per_source: 0
+  image_video_joint_packed: true
+model:
+  model_paths: '["/mnt/models/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors","/mnt/models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth"]'
+  prompt_tensor_path: "/mnt/task_runtime/FlashVSR/examples/WanVSR/prompt_tensor/posi_prompt.pth"
+  lq_proj_layer_num: 1
+  lq_proj_scale: 1.0
+train:
+  batch_size: 24
+  learning_rate: 1e-5
+  weight_decay: 0.01
+  num_epochs: 1
+  save_steps: 100
+  extra_save_steps: "10,20,50"
+  log_loss_steps: 1
+  validation_at_start: false
+  gradient_accumulation_steps: 1
+  max_train_steps: 10000
+lora:
+  trainable_models: "lq_proj_in"
+  lora_base_model: "dit"
+  lora_target_modules: "q,k,v,o"
+  lora_rank: 384
+validation:
+  validation_num_samples: 3
+  validation_num_inference_steps: 50
+  validation_fps: 8
+output:
+  output_path: "/mnt/task_wrapper/user_output/artifacts/exp/train_stage1_release_16gpu_v4_lora_17f_mix0404020_bs24_lr1e5_nostartval_aliyundegra/output"
+wandb:
+  use_wandb: true
+  wandb_project: "flashvsr"
+  wandb_name: "flashvsr-stage1-release-16gpu-v4-lora-17f-mix0404020-bs24-lr1e5-aliyundegra"
+  wandb_mode: "online"
+runtime:
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: false

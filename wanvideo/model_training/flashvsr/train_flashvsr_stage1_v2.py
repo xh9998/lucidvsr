@@ -25,6 +25,7 @@ from torch.distributed.elastic.multiprocessing.errors import record
 
 from diffsynth.core import UnifiedDataset, ModelConfig, gradient_checkpoint_forward
 from diffsynth.core.data.operators import LoadVideo, ImageCropAndResize, ToAbsolutePath
+from diffsynth.core.loader.file import load_state_dict
 from diffsynth.diffusion import *
 from diffsynth.diffusion.base_pipeline import PipelineUnit
 from diffsynth.models.wan_video_dit import WanModel, sinusoidal_embedding_1d
@@ -192,7 +193,7 @@ class PixelShuffle3d(nn.Module):
 
 
 class FlashVSRLQProjIn(nn.Module):
-    def __init__(self, in_dim, out_dim, layer_num=30, zero_init_output=True):
+    def __init__(self, in_dim, out_dim, layer_num=1, zero_init_output=True):
         super().__init__()
         self.ff = 1
         self.hh = 16
@@ -361,7 +362,7 @@ class WanTextPromptLQPipeline(WanVideoPipeline):
         pipe.model_fn = flashvsr_stage1_model_fn
         pipe.compilable_models = ["dit"]
         pipe.lq_proj_scale = 1.0
-        effective_lq_proj_layers = len(pipe.dit.blocks) if lq_proj_layer_num is None else int(lq_proj_layer_num)
+        effective_lq_proj_layers = 1 if lq_proj_layer_num is None else int(lq_proj_layer_num)
         pipe.lq_proj_in = FlashVSRLQProjIn(
             in_dim=3,
             out_dim=pipe.dit.dim,
@@ -746,7 +747,7 @@ class FlashVSRStage1Pipeline(WanVideoPipeline):
         pipe.compilable_models = ["dit"]
         pipe.debug_tensor_dump_dir = None
         pipe.lq_proj_scale = 1.0
-        effective_lq_proj_layers = len(pipe.dit.blocks) if lq_proj_layer_num is None else int(lq_proj_layer_num)
+        effective_lq_proj_layers = 1 if lq_proj_layer_num is None else int(lq_proj_layer_num)
         pipe.lq_proj_in = FlashVSRLQProjIn(
             in_dim=3,
             out_dim=pipe.dit.dim,
@@ -850,7 +851,7 @@ class WanFixedPromptFlashVSRStage1Pipeline(WanVideoPipeline):
         pipe.model_fn = flashvsr_stage1_fixed_prompt_model_fn
         pipe.compilable_models = ["dit"]
         pipe.lq_proj_scale = 1.0
-        effective_lq_proj_layers = len(pipe.dit.blocks) if lq_proj_layer_num is None else int(lq_proj_layer_num)
+        effective_lq_proj_layers = 1 if lq_proj_layer_num is None else int(lq_proj_layer_num)
         pipe.lq_proj_in = FlashVSRLQProjIn(
             in_dim=3,
             out_dim=pipe.dit.dim,
@@ -940,6 +941,21 @@ def flashvsr_stage1_export(state_dict):
     return converted
 
 
+def flashvsr_stage1_split_exported_state(state_dict):
+    exported_state = flashvsr_stage1_export(state_dict)
+    lq_proj_state = {}
+    lora_state = {}
+    other_state = {}
+    for key, value in exported_state.items():
+        if key.startswith("lq_proj_in."):
+            lq_proj_state[key[len("lq_proj_in.") :]] = value
+        elif "lora_" in key:
+            lora_state[key] = value
+        else:
+            other_state[key] = value
+    return lq_proj_state, lora_state, other_state
+
+
 class FlashVSRStage1TrainingModule(DiffusionTrainingModule):
     def __init__(
         self,
@@ -952,6 +968,7 @@ class FlashVSRStage1TrainingModule(DiffusionTrainingModule):
         lora_rank=384,
         lora_checkpoint=None,
         lq_proj_checkpoint=None,
+        resume_stage1_checkpoint=None,
         lq_proj_layer_num=None,
         lq_proj_scale: float = 1.0,
         zero_init_lq_proj_in=True,
@@ -995,8 +1012,45 @@ class FlashVSRStage1TrainingModule(DiffusionTrainingModule):
             lora_checkpoint,
             task="sft",
         )
+        if resume_stage1_checkpoint is not None:
+            if lora_base_model is None:
+                raise ValueError("resume_stage1_checkpoint requires lora_base_model to be enabled for v2 warm-start.")
+            self._load_stage1_resume_checkpoint(
+                checkpoint_path=resume_stage1_checkpoint,
+                lora_base_model=lora_base_model,
+            )
         self.use_gradient_checkpointing = use_gradient_checkpointing
         self.use_gradient_checkpointing_offload = use_gradient_checkpointing_offload
+
+    def _load_stage1_resume_checkpoint(self, checkpoint_path: str, lora_base_model: str) -> None:
+        state_dict = load_state_dict(checkpoint_path, device="cpu")
+        lq_proj_state, lora_state, _ = flashvsr_stage1_split_exported_state(state_dict)
+        if not lq_proj_state and not lora_state:
+            raise ValueError(
+                f"resume_stage1_checkpoint={checkpoint_path} does not contain FlashVSR stage1 lq_proj_in or LoRA weights."
+            )
+        if lq_proj_state:
+            load_result = self.pipe.lq_proj_in.load_state_dict(lq_proj_state, strict=False)
+            missing = getattr(load_result, "missing_keys", [])
+            unexpected = getattr(load_result, "unexpected_keys", [])
+            print(
+                f"Stage1 resume loaded lq_proj_in from {checkpoint_path}, "
+                f"keys={len(lq_proj_state)}, missing={len(missing)}, unexpected={len(unexpected)}",
+                flush=True,
+            )
+            if unexpected:
+                print(f"Unexpected lq_proj_in keys: {unexpected}", flush=True)
+        if lora_state:
+            lora_model = getattr(self.pipe, lora_base_model)
+            mapped_lora_state = self.mapping_lora_state_dict(lora_state)
+            load_result = lora_model.load_state_dict(mapped_lora_state, strict=False)
+            print(
+                f"Stage1 resume loaded LoRA from {checkpoint_path}, "
+                f"keys={len(mapped_lora_state)}, missing={len(load_result[0])}, unexpected={len(load_result[1])}",
+                flush=True,
+            )
+            if len(load_result[1]) > 0:
+                print(f"Warning, resume LoRA key mismatch! Unexpected keys: {load_result[1]}", flush=True)
 
     def get_pipeline_inputs(self, data):
         if torch.is_tensor(data["video"]):
@@ -1053,7 +1107,8 @@ def flashvsr_parser():
             action.required = False
     parser.add_argument("--prompt_tensor_path", type=str, default=None, help="Path to fixed prompt tensor.")
     parser.add_argument("--lq_proj_checkpoint", type=str, default=None, help="Optional path to initialize lq_proj_in.")
-    parser.add_argument("--lq_proj_layer_num", type=int, default=None, help="Number of linear projection heads in lq_proj_in. Defaults to number of DiT blocks.")
+    parser.add_argument("--resume_stage1_checkpoint", type=str, default=None, help="Warm-start from a mixed stage1 step checkpoint containing both lq_proj_in and LoRA weights.")
+    parser.add_argument("--lq_proj_layer_num", type=int, default=1, help="Number of linear projection heads in lq_proj_in. Defaults to 1.")
     parser.add_argument("--lq_proj_scale", type=float, default=1.0, help="Fixed multiplicative scale applied to lq_proj_in latents before adding to x.")
     parser.add_argument("--zero_init_lq_proj_in", type=lambda x: str(x).lower() in ("1", "true", "yes", "y"), default=True, help="Zero-initialize lq_proj_in output projection so step-0 keeps base-model behavior.")
     parser.add_argument("--initialize_model_on_cpu", default=False, action="store_true")
@@ -1121,6 +1176,14 @@ def parse_flashvsr_args(argv=None):
     args = parser.parse_args(argv)
     if args.prompt_tensor_path is None:
         parser.error("--prompt_tensor_path is required, either from CLI or YAML config.")
+    if args.resume_stage1_checkpoint is not None and (args.lora_checkpoint is not None or args.lq_proj_checkpoint is not None):
+        parser.error("--resume_stage1_checkpoint cannot be combined with --lora_checkpoint or --lq_proj_checkpoint.")
+    if args.resume_training_state_dir is not None and (
+        args.resume_stage1_checkpoint is not None
+        or args.lora_checkpoint is not None
+        or args.lq_proj_checkpoint is not None
+    ):
+        parser.error("--resume_training_state_dir cannot be combined with --resume_stage1_checkpoint, --lora_checkpoint, or --lq_proj_checkpoint.")
     return args
 
 
@@ -1503,6 +1566,7 @@ def main():
         lora_rank=args.lora_rank,
         lora_checkpoint=args.lora_checkpoint,
         lq_proj_checkpoint=args.lq_proj_checkpoint,
+        resume_stage1_checkpoint=args.resume_stage1_checkpoint,
         lq_proj_layer_num=args.lq_proj_layer_num,
         zero_init_lq_proj_in=args.zero_init_lq_proj_in,
         use_gradient_checkpointing=args.use_gradient_checkpointing,

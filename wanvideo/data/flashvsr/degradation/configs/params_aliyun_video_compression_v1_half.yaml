@@ -1,0 +1,30 @@
+degradation_type: aliyun_video_compression_v1
+disable_second_stage: true
+device: cuda
+scale: 4
+gt_usm: false
+gt_size: 256
+use_hflip: true
+use_rot: false
+
+# First pass only: blur -> resize -> noise -> jpeg -> video compression
+resize_prob: [0.2, 0.7, 0.1]
+resize_range: [0.15, 1.5]
+gaussian_noise_prob: 0.5
+noise_range: [1, 30]
+poisson_scale_range: [0.05, 3.0]
+gray_noise_prob: 0.4
+jpeg_range: [30, 95]
+codec: ["libx264", "h264", "mpeg4"]
+codec_prob: [0.33333, 0.33333, 0.33333]
+bitrate: [10000, 100000]
+crf_range: [20, 28]
+
+kernel_info:
+  blur_kernel_size: 10
+  kernel_list: ["iso", "aniso", "generalized_iso", "generalized_aniso", "plateau_iso", "plateau_aniso"]
+  kernel_prob: [0.45, 0.25, 0.12, 0.03, 0.12, 0.03]
+  sinc_prob: 0.1
+  blur_sigma: [0.2, 3.0]
+  betag_range: [0.5, 4.0]
+  betap_range: [1.0, 2.0]
