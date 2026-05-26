@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="620" viewBox="0 0 980 620">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#374151"/>
+    </marker>
+    <style>
+      .title { font: 700 24px sans-serif; fill: #111827; }
+      .subtitle { font: 14px sans-serif; fill: #374151; }
+      .label { font: 700 13px sans-serif; fill: #111827; text-anchor: middle; dominant-baseline: central; }
+      .small { font: 12px sans-serif; fill: #374151; text-anchor: middle; dominant-baseline: central; }
+      .note { font: 12px sans-serif; fill: #4b5563; }
+      .chunk { stroke: #374151; stroke-width: 1.2; rx: 8; ry: 8; }
+      .cache { fill: #dbeafe; stroke: #2563eb; stroke-width: 1.2; rx: 8; ry: 8; }
+      .current { fill: #fed7aa; stroke: #ea580c; stroke-width: 1.4; rx: 8; ry: 8; }
+      .future { fill: #f3f4f6; stroke: #9ca3af; stroke-width: 1; rx: 8; ry: 8; }
+      .attn { fill: #dcfce7; stroke: #16a34a; stroke-width: 1.4; rx: 10; ry: 10; }
+      .arrow { stroke: #374151; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .thin { stroke: #6b7280; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #6b7280; stroke-width: 1.6; fill: none; stroke-dasharray: 5 5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="980" height="620" fill="#ffffff"/>
+  <text x="50" y="42" class="title">DiT Streaming Inference: KV Cache Flow</text>
+  <text x="50" y="72" class="subtitle">One denoising timestep. Chunks are processed left-to-right; K/V from past chunks are cached and reused.</text>
+
+  <!-- chunk timeline -->
+  <text x="50" y="118" class="note">latent chunks</text>
+  <g transform="translate(50,140)">
+    <rect class="cache" x="0" y="0" width="74" height="48"/><text class="label" x="37" y="18">C0</text><text class="small" x="37" y="35">cached</text>
+    <rect class="cache" x="88" y="0" width="74" height="48"/><text class="label" x="125" y="18">C1</text><text class="small" x="125" y="35">cached</text>
+    <rect class="cache" x="176" y="0" width="74" height="48"/><text class="label" x="213" y="18">C2</text><text class="small" x="213" y="35">cached</text>
+    <rect class="current" x="286" y="0" width="82" height="48"/><text class="label" x="327" y="18">C3</text><text class="small" x="327" y="35">current</text>
+    <rect class="future" x="404" y="0" width="74" height="48"/><text class="label" x="441" y="18">C4</text><text class="small" x="441" y="35">future</text>
+    <rect class="future" x="492" y="0" width="74" height="48"/><text class="label" x="529" y="18">C5</text><text class="small" x="529" y="35">future</text>
+    <text class="label" x="610" y="25">...</text>
+    <rect class="future" x="660" y="0" width="86" height="48"/><text class="label" x="703" y="18">C10</text><text class="small" x="703" y="35">future</text>
+  </g>
+
+  <!-- cache and current qkv -->
+  <g transform="translate(80,250)">
+    <rect class="cache" x="0" y="0" width="250" height="74"/>
+    <text class="label" x="125" y="23">KV cache</text>
+    <text class="small" x="125" y="48">K/V from C0, C1, C2</text>
+
+    <rect class="current" x="365" y="0" width="250" height="74"/>
+    <text class="label" x="490" y="23">Current chunk C3</text>
+    <text class="small" x="490" y="48">compute Q3, K3, V3</text>
+
+    <rect class="attn" x="235" y="150" width="300" height="86"/>
+    <text class="label" x="385" y="28">Block-sparse causal attention</text>
+    <text class="small" x="385" y="54">Q3 attends to cached K/V + current K/V</text>
+
+    <path class="arrow" d="M125,74 C125,125 250,138 320,150"/>
+    <path class="arrow" d="M490,74 C490,122 450,136 420,150"/>
+    <path class="dash" d="M535,205 C650,205 690,118 615,74"/>
+    <text class="note" x="620" y="208">append K3/V3</text>
+    <text class="note" x="620" y="226">for next chunk</text>
+  </g>
+
+  <!-- next step mini timeline -->
+  <text x="50" y="535" class="note">next chunk</text>
+  <g transform="translate(50,555)">
+    <rect class="cache" x="0" y="0" width="74" height="42"/><text class="label" x="37" y="22">C0</text>
+    <rect class="cache" x="88" y="0" width="74" height="42"/><text class="label" x="125" y="22">C1</text>
+    <rect class="cache" x="176" y="0" width="74" height="42"/><text class="label" x="213" y="22">C2</text>
+    <rect class="cache" x="264" y="0" width="74" height="42"/><text class="label" x="301" y="22">C3</text>
+    <rect class="current" x="374" y="0" width="82" height="42"/><text class="label" x="415" y="22">C4</text>
+    <rect class="future" x="492" y="0" width="74" height="42"/><text class="label" x="529" y="22">C5</text>
+    <path class="thin" d="M347,21 H370"/>
+  </g>
+
+  <!-- compact notes -->
+  <g transform="translate(690,250)">
+    <text x="0" y="0" class="note">Important:</text>
+    <text x="0" y="26" class="note">1. Cache is per DiT layer.</text>
+    <text x="0" y="50" class="note">2. Cache is rebuilt per denoise step.</text>
+    <text x="0" y="74" class="note">3. Training uses mask; inference uses cache.</text>
+    <text x="0" y="98" class="note">4. Future chunks are not visible.</text>
+  </g>
+</svg>

@@ -13,6 +13,7 @@ PYTHONPATH_PREFIX="${PYTHONPATH_PREFIX:-/mnt/task_runtime/lucidvsr/third_party_c
 CFG_SCALE="${CFG_SCALE:-6.5}"
 SAMPLE_STEPS="${SAMPLE_STEPS:-50}"
 SEED="${SEED:-666}"
+OUT_FPS="${OUT_FPS:-8}"
 RES_H="${RES_H:-768}"
 RES_W="${RES_W:-1280}"
 SP_SIZE="${SP_SIZE:-1}"
@@ -99,5 +100,6 @@ PYTHONPATH="${PYTHONPATH_PREFIX}:${PYTHONPATH:-}" \
   --res_h "${RES_H}" \
   --res_w "${RES_W}" \
   --sp_size "${SP_SIZE}" \
+  --out_fps "${OUT_FPS}" \
   "${EXTRA_ARGS[@]}" \
   2>&1 | tee "${LOG_FILE}"

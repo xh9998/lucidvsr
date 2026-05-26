@@ -52,34 +52,37 @@ def smallest_8n_minus_3_geq(n: int) -> int:
 
 def pad_video_to_length(input_video: str, padded_video: str, target_frames: int, fps: int):
     reader = imageio.get_reader(input_video)
+    frames = []
+    idx = 0
+    while True:
+        try:
+            frames.append(reader.get_data(idx))
+            idx += 1
+        except Exception:
+            break
+    try:
+        reader.close()
+    except Exception:
+        pass
+    if not frames:
+        raise RuntimeError(f"no frames found in {input_video}")
+
+    height, width = frames[0].shape[:2]
+    pix_fmt = "yuv444p" if (height % 2 or width % 2) else "yuv420p"
     writer = imageio.get_writer(
         padded_video,
         fps=fps,
         codec="libx264",
         macro_block_size=None,
-        ffmpeg_params=["-pix_fmt", "yuv420p"],
+        ffmpeg_params=["-pix_fmt", pix_fmt],
     )
     try:
-        frames = []
-        idx = 0
-        while True:
-            try:
-                frame = reader.get_data(idx)
-                frames.append(frame)
-                writer.append_data(frame)
-                idx += 1
-            except Exception:
-                break
-        if not frames:
-            raise RuntimeError(f"no frames found in {input_video}")
+        for frame in frames:
+            writer.append_data(frame)
         last_frame = frames[-1]
         for _ in range(max(0, target_frames - len(frames))):
             writer.append_data(last_frame)
     finally:
-        try:
-            reader.close()
-        except Exception:
-            pass
         writer.close()
 
 

@@ -1113,3 +1113,41 @@ parser 相关参数在 `train_flashvsr_stage1_v5_3_lora.py` 中是：
 - `/mnt/task_wrapper/user_output/artifacts/exp/train_stage1_release_48gpu_v5_3_4_lora_89f_fullsources_bs1_lr1e5_aliyundegra_randomproj_img5_nonstreamproj_worker1_20260428_1834`
 
 它当前能正常出 loss，但如果后续要把它作为正式结论，需要考虑重启到包含 per-segment LQ alignment 的版本。
+
+### 14.10 修复后的随机初始化对照线
+
+本轮将 per-segment LQ alignment 修复接入正式对照训练后，新开两条随机 projector 对照线：
+
+- `v5.3 randomproj segmentalign`
+  - 目的：对照 FlashVSR projector init，观察随机 projector 从头学是否更稳。
+  - 数据结构：`17f video branch + 5f image pseudo-video branch`。
+  - LR projector：`streaming`。
+  - 初始化：
+    - 无 `resume_stage1_checkpoint`。
+    - 无 `lq_proj_checkpoint`。
+    - `--zero_init_lq_proj_in false`，projector 使用随机/默认初始化。
+    - LoRA 保持 PEFT 默认初始化，初始输出等价于零增量。
+  - 实验目录：`/mnt/task_wrapper/user_output/artifacts/exp/train_stage1_release_16gpu_v5_3_lora_17f_fullsources_bs12_lr1e5_aliyundegra_randomproj_segmentalign_20260429_0412`
+
+- `v5.3.5 randomproj nonstream`
+  - 目的：修复 `v5.3.4` 旧全局 LQ padding 风险后，重新跑 89 帧非流式 LR projector 版本。
+  - 数据结构：`89f video branch + 5f image pseudo-video branch`。
+  - LR projector：`nonstreaming`。
+  - 初始化：
+    - 无 `resume_stage1_checkpoint`。
+    - 无 `lq_proj_checkpoint`。
+    - `--zero_init_lq_proj_in false`，projector 使用随机/默认初始化。
+    - LoRA 保持 PEFT 默认初始化。
+  - 实验目录：`/mnt/task_wrapper/user_output/artifacts/exp/train_stage1_release_48gpu_v5_3_5_lora_89f_fullsources_bs1_lr1e5_aliyundegra_randomproj_img5_nonstreamproj_segmentalign_20260429_0405`
+
+这两条线都使用 `params_aliyun_video_compression_v1.yaml`，也就是 Aliyun full degradation，不是 half degradation。
+
+本轮还将 image tar manifest 备份到：
+
+- `s3://lxh/data/mainfest/takano_image_4k_tar_manifest.txt`
+
+它与之前的 Takano video manifest：
+
+- `s3://lxh/data/mainfest/takano_video_train_all.txt`
+
+放在同一个目录，避免从机缺 manifest 导致 rendezvous 卡住。

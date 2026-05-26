@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="698" height="833" viewBox="0 0 698 833">
+  <style>
+    .title { font: 700 24px sans-serif; fill: #111827; }
+    .subtitle { font: 14px sans-serif; fill: #374151; }
+    .label { font: 12px sans-serif; fill: #111827; text-anchor: middle; dominant-baseline: central; }
+    .small { font: 12px sans-serif; fill: #374151; }
+    .start { fill: #bfdbfe; stroke: #1d4ed8; stroke-width: 1; }
+    .allowed { fill: #bbf7d0; stroke: #15803d; stroke-width: 1; }
+    .masked { fill: #f3f4f6; stroke: #9ca3af; stroke-width: 1; }
+    .windowcut { fill: #fee2e2; stroke: #dc2626; stroke-width: 1; }
+  </style>
+  <text class="title" x="50" y="42">FlashVSR Stage2 Official Chunk Mask</text>
+  <text class="subtitle" x="50" y="72">Example: 89f -> 22 latent-time -> 11 chunks, local_num=8. First 3 chunks are full attention; later chunks are causal within local_num.</text>
+  <text class="subtitle" x="50" y="94">Code form: (j &lt;= i) &amp; (j &gt;= i-local_num+1), plus [0,1]=True and [:2,2]=True.</text>
+  <text class="label" x="114.0" y="110">K0</text>
+  <text class="label" x="162.0" y="110">K1</text>
+  <text class="label" x="210.0" y="110">K2</text>
+  <text class="label" x="258.0" y="110">K3</text>
+  <text class="label" x="306.0" y="110">K4</text>
+  <text class="label" x="354.0" y="110">K5</text>
+  <text class="label" x="402.0" y="110">K6</text>
+  <text class="label" x="450.0" y="110">K7</text>
+  <text class="label" x="498.0" y="110">K8</text>
+  <text class="label" x="546.0" y="110">K9</text>
+  <text class="label" x="594.0" y="110">K10</text>
+  <text class="label" x="62" y="159.0">Q0</text>
+  <text class="label" x="62" y="207.0">Q1</text>
+  <text class="label" x="62" y="255.0">Q2</text>
+  <text class="label" x="62" y="303.0">Q3</text>
+  <text class="label" x="62" y="351.0">Q4</text>
+  <text class="label" x="62" y="399.0">Q5</text>
+  <text class="label" x="62" y="447.0">Q6</text>
+  <text class="label" x="62" y="495.0">Q7</text>
+  <text class="label" x="62" y="543.0">Q8</text>
+  <text class="label" x="62" y="591.0">Q9</text>
+  <text class="label" x="62" y="639.0">Q10</text>
+  <rect class="start" x="90" y="135" width="48" height="48"/><text class="label" x="114.0" y="159.0">✓</text>
+  <rect class="start" x="138" y="135" width="48" height="48"/><text class="label" x="162.0" y="159.0">✓</text>
+  <rect class="start" x="186" y="135" width="48" height="48"/><text class="label" x="210.0" y="159.0">✓</text>
+  <rect class="masked" x="234" y="135" width="48" height="48"/><text class="label" x="258.0" y="159.0">.</text>
+  <rect class="masked" x="282" y="135" width="48" height="48"/><text class="label" x="306.0" y="159.0">.</text>
+  <rect class="masked" x="330" y="135" width="48" height="48"/><text class="label" x="354.0" y="159.0">.</text>
+  <rect class="masked" x="378" y="135" width="48" height="48"/><text class="label" x="402.0" y="159.0">.</text>
+  <rect class="masked" x="426" y="135" width="48" height="48"/><text class="label" x="450.0" y="159.0">.</text>
+  <rect class="masked" x="474" y="135" width="48" height="48"/><text class="label" x="498.0" y="159.0">.</text>
+  <rect class="masked" x="522" y="135" width="48" height="48"/><text class="label" x="546.0" y="159.0">.</text>
+  <rect class="masked" x="570" y="135" width="48" height="48"/><text class="label" x="594.0" y="159.0">.</text>
+  <rect class="start" x="90" y="183" width="48" height="48"/><text class="label" x="114.0" y="207.0">✓</text>
+  <rect class="start" x="138" y="183" width="48" height="48"/><text class="label" x="162.0" y="207.0">✓</text>
+  <rect class="start" x="186" y="183" width="48" height="48"/><text class="label" x="210.0" y="207.0">✓</text>
+  <rect class="masked" x="234" y="183" width="48" height="48"/><text class="label" x="258.0" y="207.0">.</text>
+  <rect class="masked" x="282" y="183" width="48" height="48"/><text class="label" x="306.0" y="207.0">.</text>
+  <rect class="masked" x="330" y="183" width="48" height="48"/><text class="label" x="354.0" y="207.0">.</text>
+  <rect class="masked" x="378" y="183" width="48" height="48"/><text class="label" x="402.0" y="207.0">.</text>
+  <rect class="masked" x="426" y="183" width="48" height="48"/><text class="label" x="450.0" y="207.0">.</text>
+  <rect class="masked" x="474" y="183" width="48" height="48"/><text class="label" x="498.0" y="207.0">.</text>
+  <rect class="masked" x="522" y="183" width="48" height="48"/><text class="label" x="546.0" y="207.0">.</text>
+  <rect class="masked" x="570" y="183" width="48" height="48"/><text class="label" x="594.0" y="207.0">.</text>
+  <rect class="start" x="90" y="231" width="48" height="48"/><text class="label" x="114.0" y="255.0">✓</text>
+  <rect class="start" x="138" y="231" width="48" height="48"/><text class="label" x="162.0" y="255.0">✓</text>
+  <rect class="start" x="186" y="231" width="48" height="48"/><text class="label" x="210.0" y="255.0">✓</text>
+  <rect class="masked" x="234" y="231" width="48" height="48"/><text class="label" x="258.0" y="255.0">.</text>
+  <rect class="masked" x="282" y="231" width="48" height="48"/><text class="label" x="306.0" y="255.0">.</text>
+  <rect class="masked" x="330" y="231" width="48" height="48"/><text class="label" x="354.0" y="255.0">.</text>
+  <rect class="masked" x="378" y="231" width="48" height="48"/><text class="label" x="402.0" y="255.0">.</text>
+  <rect class="masked" x="426" y="231" width="48" height="48"/><text class="label" x="450.0" y="255.0">.</text>
+  <rect class="masked" x="474" y="231" width="48" height="48"/><text class="label" x="498.0" y="255.0">.</text>
+  <rect class="masked" x="522" y="231" width="48" height="48"/><text class="label" x="546.0" y="255.0">.</text>
+  <rect class="masked" x="570" y="231" width="48" height="48"/><text class="label" x="594.0" y="255.0">.</text>
+  <rect class="allowed" x="90" y="279" width="48" height="48"/><text class="label" x="114.0" y="303.0">✓</text>
+  <rect class="allowed" x="138" y="279" width="48" height="48"/><text class="label" x="162.0" y="303.0">✓</text>
+  <rect class="allowed" x="186" y="279" width="48" height="48"/><text class="label" x="210.0" y="303.0">✓</text>
+  <rect class="allowed" x="234" y="279" width="48" height="48"/><text class="label" x="258.0" y="303.0">✓</text>
+  <rect class="masked" x="282" y="279" width="48" height="48"/><text class="label" x="306.0" y="303.0">.</text>
+  <rect class="masked" x="330" y="279" width="48" height="48"/><text class="label" x="354.0" y="303.0">.</text>
+  <rect class="masked" x="378" y="279" width="48" height="48"/><text class="label" x="402.0" y="303.0">.</text>
+  <rect class="masked" x="426" y="279" width="48" height="48"/><text class="label" x="450.0" y="303.0">.</text>
+  <rect class="masked" x="474" y="279" width="48" height="48"/><text class="label" x="498.0" y="303.0">.</text>
+  <rect class="masked" x="522" y="279" width="48" height="48"/><text class="label" x="546.0" y="303.0">.</text>
+  <rect class="masked" x="570" y="279" width="48" height="48"/><text class="label" x="594.0" y="303.0">.</text>
+  <rect class="allowed" x="90" y="327" width="48" height="48"/><text class="label" x="114.0" y="351.0">✓</text>
+  <rect class="allowed" x="138" y="327" width="48" height="48"/><text class="label" x="162.0" y="351.0">✓</text>
+  <rect class="allowed" x="186" y="327" width="48" height="48"/><text class="label" x="210.0" y="351.0">✓</text>
+  <rect class="allowed" x="234" y="327" width="48" height="48"/><text class="label" x="258.0" y="351.0">✓</text>
+  <rect class="allowed" x="282" y="327" width="48" height="48"/><text class="label" x="306.0" y="351.0">✓</text>
+  <rect class="masked" x="330" y="327" width="48" height="48"/><text class="label" x="354.0" y="351.0">.</text>
+  <rect class="masked" x="378" y="327" width="48" height="48"/><text class="label" x="402.0" y="351.0">.</text>
+  <rect class="masked" x="426" y="327" width="48" height="48"/><text class="label" x="450.0" y="351.0">.</text>
+  <rect class="masked" x="474" y="327" width="48" height="48"/><text class="label" x="498.0" y="351.0">.</text>
+  <rect class="masked" x="522" y="327" width="48" height="48"/><text class="label" x="546.0" y="351.0">.</text>
+  <rect class="masked" x="570" y="327" width="48" height="48"/><text class="label" x="594.0" y="351.0">.</text>
+  <rect class="allowed" x="90" y="375" width="48" height="48"/><text class="label" x="114.0" y="399.0">✓</text>
+  <rect class="allowed" x="138" y="375" width="48" height="48"/><text class="label" x="162.0" y="399.0">✓</text>
+  <rect class="allowed" x="186" y="375" width="48" height="48"/><text class="label" x="210.0" y="399.0">✓</text>
+  <rect class="allowed" x="234" y="375" width="48" height="48"/><text class="label" x="258.0" y="399.0">✓</text>
+  <rect class="allowed" x="282" y="375" width="48" height="48"/><text class="label" x="306.0" y="399.0">✓</text>
+  <rect class="allowed" x="330" y="375" width="48" height="48"/><text class="label" x="354.0" y="399.0">✓</text>
+  <rect class="masked" x="378" y="375" width="48" height="48"/><text class="label" x="402.0" y="399.0">.</text>
+  <rect class="masked" x="426" y="375" width="48" height="48"/><text class="label" x="450.0" y="399.0">.</text>
+  <rect class="masked" x="474" y="375" width="48" height="48"/><text class="label" x="498.0" y="399.0">.</text>
+  <rect class="masked" x="522" y="375" width="48" height="48"/><text class="label" x="546.0" y="399.0">.</text>
+  <rect class="masked" x="570" y="375" width="48" height="48"/><text class="label" x="594.0" y="399.0">.</text>
+  <rect class="allowed" x="90" y="423" width="48" height="48"/><text class="label" x="114.0" y="447.0">✓</text>
+  <rect class="allowed" x="138" y="423" width="48" height="48"/><text class="label" x="162.0" y="447.0">✓</text>
+  <rect class="allowed" x="186" y="423" width="48" height="48"/><text class="label" x="210.0" y="447.0">✓</text>
+  <rect class="allowed" x="234" y="423" width="48" height="48"/><text class="label" x="258.0" y="447.0">✓</text>
+  <rect class="allowed" x="282" y="423" width="48" height="48"/><text class="label" x="306.0" y="447.0">✓</text>
+  <rect class="allowed" x="330" y="423" width="48" height="48"/><text class="label" x="354.0" y="447.0">✓</text>
+  <rect class="allowed" x="378" y="423" width="48" height="48"/><text class="label" x="402.0" y="447.0">✓</text>
+  <rect class="masked" x="426" y="423" width="48" height="48"/><text class="label" x="450.0" y="447.0">.</text>
+  <rect class="masked" x="474" y="423" width="48" height="48"/><text class="label" x="498.0" y="447.0">.</text>
+  <rect class="masked" x="522" y="423" width="48" height="48"/><text class="label" x="546.0" y="447.0">.</text>
+  <rect class="masked" x="570" y="423" width="48" height="48"/><text class="label" x="594.0" y="447.0">.</text>
+  <rect class="allowed" x="90" y="471" width="48" height="48"/><text class="label" x="114.0" y="495.0">✓</text>
+  <rect class="allowed" x="138" y="471" width="48" height="48"/><text class="label" x="162.0" y="495.0">✓</text>
+  <rect class="allowed" x="186" y="471" width="48" height="48"/><text class="label" x="210.0" y="495.0">✓</text>
+  <rect class="allowed" x="234" y="471" width="48" height="48"/><text class="label" x="258.0" y="495.0">✓</text>
+  <rect class="allowed" x="282" y="471" width="48" height="48"/><text class="label" x="306.0" y="495.0">✓</text>
+  <rect class="allowed" x="330" y="471" width="48" height="48"/><text class="label" x="354.0" y="495.0">✓</text>
+  <rect class="allowed" x="378" y="471" width="48" height="48"/><text class="label" x="402.0" y="495.0">✓</text>
+  <rect class="allowed" x="426" y="471" width="48" height="48"/><text class="label" x="450.0" y="495.0">✓</text>
+  <rect class="masked" x="474" y="471" width="48" height="48"/><text class="label" x="498.0" y="495.0">.</text>
+  <rect class="masked" x="522" y="471" width="48" height="48"/><text class="label" x="546.0" y="495.0">.</text>
+  <rect class="masked" x="570" y="471" width="48" height="48"/><text class="label" x="594.0" y="495.0">.</text>
+  <rect class="windowcut" x="90" y="519" width="48" height="48"/><text class="label" x="114.0" y="543.0">.</text>
+  <rect class="allowed" x="138" y="519" width="48" height="48"/><text class="label" x="162.0" y="543.0">✓</text>
+  <rect class="allowed" x="186" y="519" width="48" height="48"/><text class="label" x="210.0" y="543.0">✓</text>
+  <rect class="allowed" x="234" y="519" width="48" height="48"/><text class="label" x="258.0" y="543.0">✓</text>
+  <rect class="allowed" x="282" y="519" width="48" height="48"/><text class="label" x="306.0" y="543.0">✓</text>
+  <rect class="allowed" x="330" y="519" width="48" height="48"/><text class="label" x="354.0" y="543.0">✓</text>
+  <rect class="allowed" x="378" y="519" width="48" height="48"/><text class="label" x="402.0" y="543.0">✓</text>
+  <rect class="allowed" x="426" y="519" width="48" height="48"/><text class="label" x="450.0" y="543.0">✓</text>
+  <rect class="allowed" x="474" y="519" width="48" height="48"/><text class="label" x="498.0" y="543.0">✓</text>
+  <rect class="masked" x="522" y="519" width="48" height="48"/><text class="label" x="546.0" y="543.0">.</text>
+  <rect class="masked" x="570" y="519" width="48" height="48"/><text class="label" x="594.0" y="543.0">.</text>
+  <rect class="windowcut" x="90" y="567" width="48" height="48"/><text class="label" x="114.0" y="591.0">.</text>
+  <rect class="windowcut" x="138" y="567" width="48" height="48"/><text class="label" x="162.0" y="591.0">.</text>
+  <rect class="allowed" x="186" y="567" width="48" height="48"/><text class="label" x="210.0" y="591.0">✓</text>
+  <rect class="allowed" x="234" y="567" width="48" height="48"/><text class="label" x="258.0" y="591.0">✓</text>
+  <rect class="allowed" x="282" y="567" width="48" height="48"/><text class="label" x="306.0" y="591.0">✓</text>
+  <rect class="allowed" x="330" y="567" width="48" height="48"/><text class="label" x="354.0" y="591.0">✓</text>
+  <rect class="allowed" x="378" y="567" width="48" height="48"/><text class="label" x="402.0" y="591.0">✓</text>
+  <rect class="allowed" x="426" y="567" width="48" height="48"/><text class="label" x="450.0" y="591.0">✓</text>
+  <rect class="allowed" x="474" y="567" width="48" height="48"/><text class="label" x="498.0" y="591.0">✓</text>
+  <rect class="allowed" x="522" y="567" width="48" height="48"/><text class="label" x="546.0" y="591.0">✓</text>
+  <rect class="masked" x="570" y="567" width="48" height="48"/><text class="label" x="594.0" y="591.0">.</text>
+  <rect class="windowcut" x="90" y="615" width="48" height="48"/><text class="label" x="114.0" y="639.0">.</text>
+  <rect class="windowcut" x="138" y="615" width="48" height="48"/><text class="label" x="162.0" y="639.0">.</text>
+  <rect class="windowcut" x="186" y="615" width="48" height="48"/><text class="label" x="210.0" y="639.0">.</text>
+  <rect class="allowed" x="234" y="615" width="48" height="48"/><text class="label" x="258.0" y="639.0">✓</text>
+  <rect class="allowed" x="282" y="615" width="48" height="48"/><text class="label" x="306.0" y="639.0">✓</text>
+  <rect class="allowed" x="330" y="615" width="48" height="48"/><text class="label" x="354.0" y="639.0">✓</text>
+  <rect class="allowed" x="378" y="615" width="48" height="48"/><text class="label" x="402.0" y="639.0">✓</text>
+  <rect class="allowed" x="426" y="615" width="48" height="48"/><text class="label" x="450.0" y="639.0">✓</text>
+  <rect class="allowed" x="474" y="615" width="48" height="48"/><text class="label" x="498.0" y="639.0">✓</text>
+  <rect class="allowed" x="522" y="615" width="48" height="48"/><text class="label" x="546.0" y="639.0">✓</text>
+  <rect class="allowed" x="570" y="615" width="48" height="48"/><text class="label" x="594.0" y="639.0">✓</text>
+
+  <rect class="start" x="50" y="703" width="28" height="20"/><text class="small" x="88" y="718">First 3 chunks full-attention start window</text>
+  <rect class="allowed" x="50" y="737" width="28" height="20"/><text class="small" x="88" y="752">Allowed by causal + local_num history window</text>
+  <rect class="windowcut" x="50" y="771" width="28" height="20"/><text class="small" x="88" y="786">Masked because it is older than local_num</text>
+  <rect class="masked" x="50" y="805" width="28" height="20"/><text class="small" x="88" y="820">Future chunk masked</text>
+</svg>

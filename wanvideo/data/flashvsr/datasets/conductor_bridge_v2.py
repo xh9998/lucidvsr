@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -50,8 +51,22 @@ def _list_via_conductor_cli(url: str, recursive: bool = True) -> list[str]:
     command = ["conductor", "s3", "ls", cli_url]
     if recursive:
         command.append("--recursive")
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    env = os.environ.copy()
+    extra_path = "/root/.local/bin:/miniforge/bin"
+    env["PATH"] = f"{extra_path}:{env.get('PATH', '')}"
+    env.setdefault("NOTARY_CONFIG_FILE", "/turibolt_k8s_mounts/task_configmap/notary-config")
+    env.setdefault("AWS_CA_BUNDLE", "/etc/ssl/certs/ca-certificates.crt")
+    # Use zsh -lc so non-interactive DataLoader/distributed workers get the
+    # same conductor bootstrap behavior as the user's verified tmux shells.
+    shell_command = " ".join(shlex.quote(item) for item in command)
+    result = subprocess.run(["zsh", "-lc", shell_command], capture_output=True, text=True, check=False, env=env)
     if result.returncode != 0:
+        if os.environ.get("FLASHVSR_DATA_DEBUG", "0") == "1":
+            print(
+                "[conductor_bridge_v2] conductor ls failed "
+                f"url={url} returncode={result.returncode} stderr={result.stderr.strip()[:1000]}",
+                flush=True,
+            )
         return []
     urls: list[str] = []
     for raw_line in result.stdout.splitlines():

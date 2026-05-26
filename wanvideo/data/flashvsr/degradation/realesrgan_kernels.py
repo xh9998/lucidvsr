@@ -120,7 +120,7 @@ class DegradationModel:
             random.seed(seed)
             np.random.seed(seed)
             torch.manual_seed(seed)
-            if torch.cuda.is_available():
+            if self.device.type == "cuda" and torch.cuda.is_available():
                 torch.cuda.manual_seed(seed)
                 torch.cuda.manual_seed_all(seed)
 

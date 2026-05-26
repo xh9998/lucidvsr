@@ -129,7 +129,7 @@ class AliyunVideoCompressionDegradationModel:
             random.seed(seed)
             np.random.seed(seed)
             torch.manual_seed(seed)
-            if torch.cuda.is_available():
+            if self.device.type == "cuda" and torch.cuda.is_available():
                 torch.cuda.manual_seed(seed)
                 torch.cuda.manual_seed_all(seed)
 
@@ -238,7 +238,7 @@ class AliyunVideoCompressionDegradationModel:
             gt = self.usm_sharpener(gt)
 
         ori_h, ori_w = gt.size()[2:4]
-        out = filter2D(gt, params["kernel1"])
+        out = filter2D(gt.contiguous(), params["kernel1"])
         out = F.interpolate(out, scale_factor=params["resize_scale"], mode=params["resize_mode"])
         batch_size = out.size(0)
         gray_noise = self._expand_batch_param(params["gray_noise"], batch_size, out.device)
@@ -266,7 +266,7 @@ class AliyunVideoCompressionDegradationModel:
 
         if not self.opt["disable_second_stage"]:
             if params["second_blur"]:
-                out = filter2D(out, params["kernel2"])
+                out = filter2D(out.contiguous(), params["kernel2"])
             out = F.interpolate(
                 out,
                 size=(int(ori_h / self.opt["scale"] * params["resize_scale2"]), int(ori_w / self.opt["scale"] * params["resize_scale2"])),
@@ -300,7 +300,7 @@ class AliyunVideoCompressionDegradationModel:
                         size=(ori_h // self.opt["scale"], ori_w // self.opt["scale"]),
                         mode=params["resize_mode3"],
                     )
-                    out = filter2D(out, params["sinc_kernel"])
+                    out = filter2D(out.contiguous(), params["sinc_kernel"])
                 elif op_index == 2:
                     out = torch.clamp(out, 0, 1)
                     out = self.jpeger(out, quality=params["jpeg_p2"])

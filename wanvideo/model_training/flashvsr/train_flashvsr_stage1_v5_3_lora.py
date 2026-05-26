@@ -272,6 +272,9 @@ def _align_lq_latents_to_dit_tokens(
     tokens_per_frame: int,
     raw_segment_lengths: Optional[Sequence[Sequence[int]]] = None,
 ) -> List[torch.Tensor]:
+    if all(layer_latents.shape[1] == expected_tokens for layer_latents in lq_latents):
+        return list(lq_latents)
+
     def align_global(layer_latents: torch.Tensor) -> torch.Tensor:
         current_tokens = layer_latents.shape[1]
         if current_tokens == expected_tokens:
@@ -577,7 +580,7 @@ class PixelShuffle3d(nn.Module):
 class FlashVSRLQProjIn(nn.Module):
     def __init__(self, in_dim, out_dim, layer_num=1, zero_init_output=True, temporal_mode: str = "streaming"):
         super().__init__()
-        if temporal_mode not in ("streaming", "nonstreaming"):
+        if temporal_mode not in ("streaming", "nonstreaming", "nonstreaming_aligned"):
             raise ValueError(f"Unsupported lq_proj temporal_mode={temporal_mode!r}.")
         self.temporal_mode = temporal_mode
         self.ff = 1
@@ -619,7 +622,7 @@ class FlashVSRLQProjIn(nn.Module):
                 nn.init.zeros_(layer.bias)
 
     def forward(self, video):
-        if self.temporal_mode == "nonstreaming":
+        if self.temporal_mode in ("nonstreaming", "nonstreaming_aligned"):
             return self.forward_nonstreaming(video)
         self.clear_cache()
         t = video.shape[2]
@@ -650,9 +653,11 @@ class FlashVSRLQProjIn(nn.Module):
         x = self.conv2(x, None)
         x = self.norm2(x)
         x = self.act2(x)
-        # Drop the warm-up output so temporal length matches the official
-        # chunked projector: 89 raw frames -> 22 LQ latent frames, 5 -> 1.
-        if x.shape[2] > 0:
+        # The legacy nonstreaming mode mimics FlashVSR's streaming projector by
+        # dropping the warm-up output: 89 raw frames -> 22 LQ latent frames.
+        # The aligned mode keeps it so Stage-1 non-streaming SR matches WAN VAE:
+        # 89 raw frames -> 23 LQ latent frames, 17 -> 5, image pseudo-video 5 -> 2.
+        if self.temporal_mode == "nonstreaming" and x.shape[2] > 0:
             x = x[:, :, 1:]
         x = rearrange(x, "b c f h w -> b (f h w) c")
         outputs = []
@@ -810,6 +815,7 @@ class WanTextPromptLQPipeline(WanVideoPipeline):
         model_configs=None,
         tokenizer_config=None,
         lq_proj_layer_num=None,
+        lq_proj_temporal_mode="streaming",
     ):
         pipe = WanVideoPipeline.from_pretrained(
             torch_dtype=torch_dtype,
@@ -836,6 +842,7 @@ class WanTextPromptLQPipeline(WanVideoPipeline):
             out_dim=pipe.dit.dim,
             layer_num=effective_lq_proj_layers,
             zero_init_output=False,
+            temporal_mode=lq_proj_temporal_mode,
         ).to(device=device, dtype=torch_dtype)
         return pipe
 
@@ -1436,6 +1443,7 @@ class WanFixedPromptFlashVSRStage1Pipeline(WanVideoPipeline):
         model_configs=None,
         prompt_tensor_path=None,
         lq_proj_layer_num=None,
+        lq_proj_temporal_mode="streaming",
     ):
         pipe = WanVideoPipeline.from_pretrained(
             torch_dtype=torch_dtype,
@@ -1464,6 +1472,7 @@ class WanFixedPromptFlashVSRStage1Pipeline(WanVideoPipeline):
             out_dim=pipe.dit.dim,
             layer_num=effective_lq_proj_layers,
             zero_init_output=False,
+            temporal_mode=lq_proj_temporal_mode,
         ).to(device=device, dtype=torch_dtype)
         return pipe
 
@@ -1782,7 +1791,17 @@ def flashvsr_parser():
     parser.add_argument("--resume_stage1_checkpoint", type=str, default=None, help="Warm-start from a mixed stage1 step checkpoint containing both lq_proj_in and LoRA weights.")
     parser.add_argument("--lq_proj_layer_num", type=int, default=1, help="Number of linear projection heads in lq_proj_in. Defaults to 1.")
     parser.add_argument("--lq_proj_scale", type=float, default=1.0, help="Fixed multiplicative scale applied to lq_proj_in latents before adding to x.")
-    parser.add_argument("--lq_proj_temporal_mode", type=str, default="streaming", choices=("streaming", "nonstreaming"), help="LR projector temporal path. 'streaming' matches FlashVSR chunk/cache behavior; 'nonstreaming' runs full 3D convs over the whole clip.")
+    parser.add_argument(
+        "--lq_proj_temporal_mode",
+        type=str,
+        default="streaming",
+        choices=("streaming", "nonstreaming", "nonstreaming_aligned"),
+        help=(
+            "LR projector temporal path. 'streaming' matches FlashVSR chunk/cache behavior; "
+            "'nonstreaming' runs full 3D convs and drops the warm-up output; "
+            "'nonstreaming_aligned' keeps the warm-up output so LQ tokens match WAN VAE latent time."
+        ),
+    )
     parser.add_argument("--zero_init_lq_proj_in", type=lambda x: str(x).lower() in ("1", "true", "yes", "y"), default=True, help="Zero-initialize lq_proj_in output projection so step-0 keeps base-model behavior.")
     parser.add_argument("--freeze_lq_proj_in", type=lambda x: str(x).lower() in ("1", "true", "yes", "y"), default=False, help="Freeze lq_proj_in parameters during training.")
     parser.add_argument("--initialize_model_on_cpu", default=False, action="store_true")
@@ -2017,6 +2036,7 @@ class FlashVSRValidationCallback:
         validation_tokenizer_config: Optional[ModelConfig] = None,
         validation_prompt_tensor_path: Optional[str] = None,
         validation_lq_proj_layer_num: Optional[int] = None,
+        validation_lq_proj_temporal_mode: str = "streaming",
     ):
         self.output_path = output_path
         self.validation_samples = validation_samples
@@ -2032,6 +2052,7 @@ class FlashVSRValidationCallback:
         self.validation_tokenizer_config = validation_tokenizer_config
         self.validation_prompt_tensor_path = validation_prompt_tensor_path
         self.validation_lq_proj_layer_num = validation_lq_proj_layer_num
+        self.validation_lq_proj_temporal_mode = validation_lq_proj_temporal_mode
     def _get_v2_validation_pipe(self, device, torch_dtype):
         return WanFixedPromptFlashVSRStage1Pipeline.from_pretrained(
             torch_dtype=torch_dtype,
@@ -2039,6 +2060,7 @@ class FlashVSRValidationCallback:
             model_configs=self.validation_model_configs,
             prompt_tensor_path=self.validation_prompt_tensor_path,
             lq_proj_layer_num=self.validation_lq_proj_layer_num,
+            lq_proj_temporal_mode=self.validation_lq_proj_temporal_mode,
         )
 
     def _get_wan_text_baseline_pipe(self, device, torch_dtype):
@@ -2048,6 +2070,7 @@ class FlashVSRValidationCallback:
             model_configs=self.validation_model_configs,
             tokenizer_config=self.validation_tokenizer_config,
             lq_proj_layer_num=self.validation_lq_proj_layer_num,
+            lq_proj_temporal_mode=self.validation_lq_proj_temporal_mode,
         )
 
     def __call__(self, accelerator, model, checkpoint_path: str, step: int):
@@ -2310,6 +2333,7 @@ def main():
             stride=args.stride,
             max_source_frames=args.max_source_frames,
             enable_degradation=args.enable_degradation,
+            degradation_config_path=args.degradation_config_path,
             degradation_seed=args.degradation_seed,
             hq_prefix_frames=args.hq_prefix_frames,
             control_dropout_prob=args.control_dropout_prob,
@@ -2330,6 +2354,7 @@ def main():
             stride=args.stride,
             max_source_frames=args.max_source_frames,
             enable_degradation=args.enable_degradation,
+            degradation_config_path=args.degradation_config_path,
             degradation_seed=args.degradation_seed,
             hq_prefix_frames=args.hq_prefix_frames,
             control_dropout_prob=args.control_dropout_prob,
@@ -2437,6 +2462,7 @@ def main():
             validation_tokenizer_config=validation_tokenizer_config,
             validation_prompt_tensor_path=args.prompt_tensor_path,
             validation_lq_proj_layer_num=args.lq_proj_layer_num,
+            validation_lq_proj_temporal_mode=args.lq_proj_temporal_mode,
         )
     accelerator.wait_for_everyone()
     model_logger = ModelLogger(

@@ -46,7 +46,6 @@ from wanvideo.data.flashvsr.degradation import build_degradation_model
 from .conductor_bridge_v2 import list_remote_files_with_suffixes
 from .parquet_index import FlashVSRParquetRecord, load_parquet_records, normalize_remote_url
 
-
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".webm", ".MP4", ".AVI", ".MOV", ".MKV", ".WEBM")
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG")
 REMOTE_DISCOVERY_PREFIXES = ("conductor://", "s3://", "blobby://")
@@ -80,6 +79,25 @@ def _train_debug_print(message: str):
 _CONVERT_DEBUG_COUNT = 0
 _COLLATE_DEBUG_COUNT = 0
 _TRAIN_DEBUG_ENABLED = os.environ.get("FLASHVSR_TRAIN_DEBUG", "").lower() in ("1", "true", "yes", "y")
+_DATA_TIMING_DEBUG_ENABLED = os.environ.get("FLASHVSR_DATA_TIMING_DEBUG", "").lower() in ("1", "true", "yes", "y")
+_DATA_TIMING_DEBUG_COUNT = 0
+_DATA_TIMING_DEBUG_MAX = int(os.environ.get("FLASHVSR_DATA_TIMING_DEBUG_MAX", "12"))
+
+
+def _data_timing_log(message: str):
+    if not _DATA_TIMING_DEBUG_ENABLED:
+        return
+    rank = os.environ.get("RANK", "?")
+    local_rank = os.environ.get("LOCAL_RANK", "?")
+    worker = get_worker_info()
+    worker_id = "main" if worker is None else str(worker.id)
+    print(f"[flashvsr_data_timing rank={rank} local_rank={local_rank} worker={worker_id}] {message}", flush=True)
+
+
+def _distributed_rank_world_size() -> Tuple[int, int]:
+    if dist.is_available() and dist.is_initialized():
+        return dist.get_rank(), dist.get_world_size()
+    return int(os.environ.get("RANK", "0")), int(os.environ.get("WORLD_SIZE", "1"))
 
 
 def _expand_input_urls(base_url: Optional[str]) -> List[str]:
@@ -138,10 +156,18 @@ def _read_discovery_cache(cache_path: str) -> Optional[List[str]]:
     urls = payload.get("urls")
     if not isinstance(urls, list):
         return None
-    return [normalize_remote_url(str(url)) for url in urls]
+    normalized_urls = [normalize_remote_url(str(url)) for url in urls]
+    # Empty discovery results are not a valid cache for remote datasets. A
+    # transient conductor/env failure can otherwise poison future distributed
+    # launches and make every rank immediately see an empty source list.
+    if not normalized_urls:
+        return None
+    return normalized_urls
 
 
 def _write_discovery_cache(cache_path: str, urls: Sequence[str]) -> None:
+    if not urls:
+        return
     tmp_path = f"{cache_path}.tmp.{os.getpid()}"
     with open(tmp_path, "w", encoding="utf-8") as file:
         json.dump({"urls": list(urls)}, file, ensure_ascii=False)
@@ -181,8 +207,9 @@ def _node_local_rank() -> int:
 
 
 def _degradation_cuda_device() -> str:
-    if torch.cuda.is_available():
-        return f"cuda:{_node_local_rank()}"
+    # Keep online degradation outside CUDA. Degradation runs in DataLoader
+    # workers; using CUDA here creates extra contexts and large temporary
+    # tensors that compete with model training memory.
     return "cpu"
 
 
@@ -560,34 +587,31 @@ class FlashVSRStreamingDataset(IterableDataset):
         return urls[worker.id :: worker.num_workers]
 
     def _split_for_process_and_worker(self, items: List[Any]) -> List[Any]:
-        rank = 0
-        world_size = 1
-        if dist.is_available() and dist.is_initialized():
-            rank = dist.get_rank()
-            world_size = dist.get_world_size()
+        rank, world_size = _distributed_rank_world_size()
         sharded = items[rank::world_size]
         worker = get_worker_info()
         if worker is None:
             return sharded
         return sharded[worker.id :: worker.num_workers]
 
+    def _split_for_process(self, items: List[Any]) -> List[Any]:
+        rank, world_size = _distributed_rank_world_size()
+        return items[rank::world_size]
+
     def _make_iteration_rng(self) -> random.Random:
         worker = get_worker_info()
         worker_id = 0 if worker is None else worker.id
+        rank, _ = _distributed_rank_world_size()
         if self.global_seed is not None:
-            seed = int(self.global_seed) + worker_id * 1000003
+            seed = int(self.global_seed) + rank * 10000019 + worker_id * 1000003
         elif self.degradation_seed is not None:
-            seed = int(self.degradation_seed) + worker_id * 1000003
+            seed = int(self.degradation_seed) + rank * 10000019 + worker_id * 1000003
         else:
             seed = random.SystemRandom().randint(0, 2**31 - 1)
         return random.Random(seed)
 
     def _rank_worker_shard(self) -> Tuple[int, int]:
-        rank = 0
-        world_size = 1
-        if dist.is_available() and dist.is_initialized():
-            rank = dist.get_rank()
-            world_size = dist.get_world_size()
+        rank, world_size = _distributed_rank_world_size()
         worker = get_worker_info()
         if worker is None:
             return rank, world_size
@@ -703,17 +727,38 @@ class FlashVSRStreamingDataset(IterableDataset):
 
     def _open_binary(self, url: str) -> bytes:
         url = normalize_remote_url(url)
+        timing_start = time.perf_counter() if _DATA_TIMING_DEBUG_ENABLED else None
+        data = None
+        backend = None
         if fsspec is not None:
             try:
                 with fsspec.open(url, "rb").open() as file:
-                    return file.read()
+                    data = file.read()
+                backend = "fsspec"
+                if timing_start is not None:
+                    _data_timing_log(
+                        f"open_binary backend={backend} bytes={len(data)} elapsed={time.perf_counter() - timing_start:.3f}s url={url}"
+                    )
+                return data
             except Exception:
                 pass
         if parabolt is not None and hasattr(parabolt, "io") and hasattr(parabolt.io, "open"):
             with parabolt.io.open(url, "rb") as file:
-                return file.read()
+                data = file.read()
+            backend = "parabolt"
+            if timing_start is not None:
+                _data_timing_log(
+                    f"open_binary backend={backend} bytes={len(data)} elapsed={time.perf_counter() - timing_start:.3f}s url={url}"
+                )
+            return data
         with open(url, "rb") as file:
-            return file.read()
+            data = file.read()
+        backend = "local"
+        if timing_start is not None:
+            _data_timing_log(
+                f"open_binary backend={backend} bytes={len(data)} elapsed={time.perf_counter() - timing_start:.3f}s url={url}"
+            )
+        return data
 
     @contextmanager
     def _open_stream(self, url: str):
@@ -791,20 +836,50 @@ class FlashVSRStreamingDataset(IterableDataset):
         return lq_frames
 
     def _process_video_bytes(self, video_bytes: bytes, sample_id: str, rng: random.Random) -> Optional[Dict[str, Any]]:
+        global _DATA_TIMING_DEBUG_COUNT
+        timing_enabled = _DATA_TIMING_DEBUG_ENABLED and _DATA_TIMING_DEBUG_COUNT < _DATA_TIMING_DEBUG_MAX
+        timing_start = time.perf_counter() if timing_enabled else None
         frames = self._extract_frames(video_bytes)
+        timing_after_decode = time.perf_counter() if timing_enabled else None
         if frames is None:
+            if timing_enabled:
+                _data_timing_log(
+                    f"process_video sample_id={sample_id} bytes={len(video_bytes)} decode={timing_after_decode - timing_start:.3f}s rejected=decode"
+                )
+                _DATA_TIMING_DEBUG_COUNT += 1
             return None
         clip = self._select_clip(frames, rng=rng)
+        timing_after_select = time.perf_counter() if timing_enabled else None
         if clip is None:
+            if timing_enabled:
+                _data_timing_log(
+                    f"process_video sample_id={sample_id} bytes={len(video_bytes)} frames={len(frames)} "
+                    f"decode={timing_after_decode - timing_start:.3f}s select={timing_after_select - timing_after_decode:.3f}s rejected=clip"
+                )
+                _DATA_TIMING_DEBUG_COUNT += 1
             return None
         sample_seed = self._next_sample_seed(rng)
-        return self._maybe_convert_output({
+        lq_video = self._build_lq_clip(clip, rng=rng, sample_seed=sample_seed)
+        timing_after_degrade = time.perf_counter() if timing_enabled else None
+        output = self._maybe_convert_output({
             "video": clip,
-            "lq_video": self._build_lq_clip(clip, rng=rng, sample_seed=sample_seed),
+            "lq_video": lq_video,
             "sample_id": sample_id,
             "source_type": "video",
             "sample_seed": sample_seed,
         })
+        if timing_enabled:
+            timing_after_convert = time.perf_counter()
+            _data_timing_log(
+                f"process_video sample_id={sample_id} bytes={len(video_bytes)} frames={len(frames)} "
+                f"decode={timing_after_decode - timing_start:.3f}s "
+                f"select={timing_after_select - timing_after_decode:.3f}s "
+                f"degrade={timing_after_degrade - timing_after_select:.3f}s "
+                f"convert={timing_after_convert - timing_after_degrade:.3f}s "
+                f"total={timing_after_convert - timing_start:.3f}s"
+            )
+            _DATA_TIMING_DEBUG_COUNT += 1
+        return output
 
     def _process_image(self, image: Image.Image, sample_id: str, rng: random.Random) -> Optional[Dict[str, Any]]:
         try:
@@ -863,7 +938,9 @@ class FlashVSRStreamingDataset(IterableDataset):
     def _make_torchdata_tar_pipe(self, urls: List[str], rng: Optional[random.Random] = None):
         if IterableWrapper is None:
             raise ImportError("torchdata is required for TAR-based FlashVSR streaming datasets.")
-        ordered_urls = list(urls)
+        ordered_urls = self._split_for_process(list(urls))
+        if not ordered_urls:
+            ordered_urls = list(urls)
         if rng is not None:
             rng.shuffle(ordered_urls)
         datapipe = IterableWrapper(ordered_urls)

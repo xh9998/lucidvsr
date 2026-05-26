@@ -38,12 +38,10 @@ class ConsistentClipDegradation:
     def _get_model(self):
         current_pid = os.getpid()
         if self.model is None or self.model_pid != current_pid:
-            if torch.cuda.is_available():
-                local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-                torch.cuda.set_device(local_rank)
-                device = f"cuda:{local_rank}"
-            else:
-                device = "cpu"
+            # Online degradation may run inside DataLoader workers. Keep it on
+            # CPU so increasing dataset_num_workers does not create one CUDA
+            # context and temporary GPU tensors per worker.
+            device = "cpu"
             self.model = build_degradation_model(config_path=self.config_path, device=device)
             self.model_pid = current_pid
         return self.model

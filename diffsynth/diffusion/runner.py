@@ -26,14 +26,15 @@ def _first_item_collate(batch):
     return batch[0]
 
 
-def _set_worker_cuda_device(worker_id: int):
-    if not torch.cuda.is_available():
-        return
-    try:
-        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-    except ValueError:
-        local_rank = 0
-    torch.cuda.set_device(local_rank)
+def _init_data_worker_no_cuda(worker_id: int):
+    # DataLoader workers must stay CPU-only. Calling torch.cuda.is_available()
+    # or torch.cuda.set_device() here creates one CUDA context per worker and
+    # steals GPU memory from the training process.
+    base_seed = torch.initial_seed() % (2 ** 32)
+    random.seed(base_seed + worker_id)
+    if np is not None:
+        np.random.seed((base_seed + worker_id) % (2 ** 32))
+    torch.manual_seed(base_seed + worker_id)
 
 
 class _PreBatchedIterableDataset(torch.utils.data.IterableDataset):
@@ -296,7 +297,7 @@ def launch_training_task(
             multiprocessing_context = getattr(args, "dataloader_multiprocessing_context", None)
             if multiprocessing_context:
                 dataloader_kwargs["multiprocessing_context"] = multiprocessing_context
-            dataloader_kwargs["worker_init_fn"] = _set_worker_cuda_device
+            dataloader_kwargs["worker_init_fn"] = _init_data_worker_no_cuda
             if _DATALOADER_SUPPORTS_IN_ORDER:
                 dataloader_kwargs["in_order"] = bool(getattr(args, "dataloader_in_order", True))
     debug_log(
@@ -497,7 +498,7 @@ def launch_data_process_task(
             multiprocessing_context = getattr(args, "dataloader_multiprocessing_context", None)
             if multiprocessing_context:
                 dataloader_kwargs["multiprocessing_context"] = multiprocessing_context
-            dataloader_kwargs["worker_init_fn"] = _set_worker_cuda_device
+            dataloader_kwargs["worker_init_fn"] = _init_data_worker_no_cuda
             if _DATALOADER_SUPPORTS_IN_ORDER:
                 dataloader_kwargs["in_order"] = bool(getattr(args, "dataloader_in_order", True))
     dataloader = torch.utils.data.DataLoader(dataset, **dataloader_kwargs)

@@ -1,0 +1,85 @@
+data:
+  dataset_mode: stage2_video_only
+  yubari_video_tar_url: "conductor://ve-t2222-datasets/projects/yubari/1.1/data/video/"
+  takano_video_tar_url: "/mnt/task_wrapper/user_output/artifacts/data/manifests/takano_video_train_all.txt"
+  yubari_video_prob: 0.5
+  takano_video_prob: 0.5
+  height: 768
+  width: 1280
+  num_frames: 89
+  stride: 1
+  max_source_frames: 160
+  enable_degradation: true
+  degradation_config_path: "/mnt/task_runtime/lucidvsr/wanvideo/data/flashvsr/degradation/configs/params_aliyun_video_compression_v1.yaml"
+  global_seed: 2026051507
+  dataset_num_workers: 2
+  dataloader_prefetch_factor: 1
+  dataloader_persistent_workers: false
+  dataloader_in_order: false
+  dataloader_multiprocessing_context: spawn
+  shuffle_buffer: 20
+model:
+  model_paths: '["/mnt/models/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors","/mnt/models/Wan2.1-T2V-1.3B/Wan2.1_VAE.pth"]'
+  prompt_tensor_path: "/mnt/task_runtime/FlashVSR/examples/WanVSR/prompt_tensor/posi_prompt.pth"
+  lq_proj_layer_num: 1
+  lq_proj_scale: 1.0
+  zero_init_lq_proj_in: false
+train:
+  batch_size: 1
+  learning_rate: 1e-5
+  weight_decay: 0.01
+  num_epochs: 1
+  save_steps: 1
+  extra_save_steps: "1"
+  log_loss_steps: 1
+  validation_at_start: false
+  gradient_accumulation_steps: 1
+  max_train_steps: 1
+lora:
+  trainable_models: "lq_proj_in"
+  lora_base_model: "dit"
+  lora_target_modules: "q,k,v,o"
+  lora_rank: 384
+validation:
+  validation_num_samples: 3
+  stage3_validation_collect_num_workers: 2
+  stage3_validation_from_training_batch: true
+  validation_num_inference_steps: 1
+  validation_fps: 8
+output:
+  output_path: "/mnt/task_wrapper/user_output/artifacts/exp/train_stage3_release_smoke_2gpu_v7_d_lora_89f_videoonly_authorweights_val3_notile/output"
+wandb:
+  use_wandb: true
+  wandb_project: "flashvsr"
+  wandb_name: "flashvsr-stage3-smoke-2gpu-v7-d-lora-89f-videoonly-authorweights-val3-notile"
+  wandb_mode: "online"
+runtime:
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: false
+stage2_attention_mode: "block_sparse_chunk_causal"
+stage2_topk_ratio: 2.0
+stage2_local_num: -1
+stage3_recon_num_latents: 2
+stage3_flow_weight: 1.0
+stage3_mse_weight: 1.0
+stage3_lpips_weight: 2.0
+stage3_lpips_net: "vgg"
+stage3_first_frame_pixel_weight: 4.0
+stage3_first_frame_lpips_weight: 4.0
+stage3_decoder_cpu_offload: true
+stage3_validation_tiled: false
+stage3_compute_z_pred: true
+stage3_fake_checkpoint: null
+stage3_fake_attention_mode: "dense_full"
+stage3_fake_fm_weight: 1.0
+stage3_fake_update_ratio: 1
+stage3c_fake_learning_rate: 1e-5
+stage3c_fake_skeleton_loss_weight: 0.0
+stage3_real_attention_mode: "dense_full"
+stage3_real_probe_every: 1000000
+stage3_fake_probe_attention_mode: "dense_full"
+stage3_fake_probe_every: 1000000
+stage3_dmd_probe_every: 1
+stage3_dmd_weight: 1.0
+stage3_dmd_grad_norm_max: 5.0
+stage3_dmd_spike_policy: "skip"

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620">
+  <defs>
+    <style>
+      .bg { fill: #fbfaf7; }
+      .title { font: 700 30px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #263238; }
+      .subtitle { font: 500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #56616b; }
+      .label { font: 700 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #263238; }
+      .small { font: 500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #56616b; }
+      .mono { font: 600 15px "SFMono-Regular", Consolas, monospace; fill: #263238; }
+      .box { stroke: #d7d0c3; stroke-width: 2; rx: 18; }
+      .frame { stroke: #ffffff; stroke-width: 1.5; rx: 5; }
+      .arrow { stroke: #64748b; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .dash { stroke-dasharray: 8 6; }
+      .raw { fill: #c9d8d3; }
+      .pad { fill: #e8b7a8; }
+      .model { fill: #b7c9e2; }
+      .latent { fill: #d8c5e6; }
+      .out { fill: #c8d7a8; }
+      .warn { fill: #f7e4b8; stroke: #e1b85b; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="620"/>
+  <text class="title" x="54" y="56">FlashVSR Official Streaming Frame Rule</text>
+  <text class="subtitle" x="54" y="86">The model input length is determined by the streaming window, not simply by the original video length.</text>
+
+  <rect class="box" x="52" y="122" width="1176" height="160" fill="#ffffff"/>
+  <text class="label" x="80" y="156">1. Official input preparation</text>
+  <text class="small" x="80" y="182">For a real target segment of 8n-3 frames, FlashVSR appends 4 copies of the last frame, then feeds 8n+1 frames into the model.</text>
+
+  <text class="mono" x="84" y="224">real target frames</text>
+  <g transform="translate(250,202)">
+    <rect class="frame raw" x="0" y="0" width="34" height="42"/><text class="small" x="10" y="27">0</text>
+    <rect class="frame raw" x="38" y="0" width="34" height="42"/><text class="small" x="48" y="27">1</text>
+    <rect class="frame raw" x="76" y="0" width="34" height="42"/><text class="small" x="84" y="27">2</text>
+    <rect class="frame raw" x="114" y="0" width="34" height="42"/><text class="small" x="124" y="27">3</text>
+    <text class="small" x="156" y="27">...</text>
+    <rect class="frame raw" x="202" y="0" width="48" height="42"/><text class="small" x="211" y="27">F-1</text>
+  </g>
+  <path class="arrow" d="M535 224 C590 224 610 224 660 224"/>
+  <text class="mono" x="690" y="224">append last frame x4</text>
+  <g transform="translate(890,202)">
+    <rect class="frame pad" x="0" y="0" width="48" height="42"/><text class="small" x="9" y="27">F-1</text>
+    <rect class="frame pad" x="52" y="0" width="48" height="42"/><text class="small" x="61" y="27">F-1</text>
+    <rect class="frame pad" x="104" y="0" width="48" height="42"/><text class="small" x="113" y="27">F-1</text>
+    <rect class="frame pad" x="156" y="0" width="48" height="42"/><text class="small" x="165" y="27">F-1</text>
+  </g>
+
+  <rect class="box" x="52" y="310" width="570" height="220" fill="#ffffff"/>
+  <text class="label" x="80" y="344">2. Canonical example</text>
+  <text class="small" x="80" y="374">If the target output is 85 frames:</text>
+  <text class="mono" x="104" y="412">85 real frames + 4 repeated tail frames = 89 model input frames</text>
+  <text class="mono" x="104" y="446">89 = 8 * 11 + 1</text>
+  <text class="mono" x="104" y="480">process_total_num = (89 - 1) / 8 - 2 = 9</text>
+  <text class="small" x="104" y="512">So the displayed “Target Frames (8n-3)” is 85, while the tensor fed to the model has 89 frames.</text>
+
+  <rect class="box" x="658" y="310" width="570" height="220" fill="#ffffff"/>
+  <text class="label" x="686" y="344">3. Streaming latent path</text>
+  <text class="small" x="686" y="374">The first frame warms up the causal projector. Later groups are processed by streaming chunks.</text>
+  <g transform="translate(700,405)">
+    <rect class="frame model" x="0" y="0" width="120" height="46"/><text class="small" x="17" y="28">f0 x4 warm</text>
+    <path class="arrow" d="M130 23 L195 23"/>
+    <rect class="frame latent" x="210" y="0" width="110" height="46"/><text class="small" x="232" y="28">no output</text>
+    <path class="arrow" d="M330 23 L395 23"/>
+    <rect class="frame out" x="410" y="0" width="118" height="46"/><text class="small" x="430" y="28">cache only</text>
+  </g>
+  <g transform="translate(700,472)">
+    <rect class="frame model" x="0" y="0" width="120" height="46"/><text class="small" x="17" y="28">f1-f4</text>
+    <path class="arrow" d="M130 23 L195 23"/>
+    <rect class="frame latent" x="210" y="0" width="110" height="46"/><text class="small" x="250" y="28">z1</text>
+    <path class="arrow" d="M330 23 L395 23"/>
+    <rect class="frame out" x="410" y="0" width="118" height="46"/><text class="small" x="438" y="28">SR block</text>
+  </g>
+
+  <rect class="box warn" x="52" y="552" width="1176" height="44" rx="14"/>
+  <text class="small" x="80" y="580">Current v6.1 test uses the same streaming/cache idea, but it assumes the input is already 8n+1. It has not yet implemented the official tail-repeat preprocessing inside the inference wrapper.</text>
+</svg>
